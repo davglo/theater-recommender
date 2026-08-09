@@ -13,6 +13,9 @@ if ! git remote get-url origin >/dev/null 2>&1; then
   exit 1
 fi
 
+# Refresh the public GitHub Pages snapshot (docs/index.html) from the live DB.
+/usr/bin/python3 render.py --publish >/dev/null 2>&1 || echo "warning: snapshot refresh failed"
+
 if git diff --quiet && git diff --cached --quiet && [ -z "$(git status --porcelain)" ]; then
   echo "Nothing to sync — working tree is clean."
   exit 0

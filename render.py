@@ -92,12 +92,17 @@ TEMPLATE = """<!DOCTYPE html>
            border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .3s;
            pointer-events: none; }
   #toast.show { opacity: 1; }
+  /* Read-only published snapshot: hide all decision controls. */
+  body.static .btns, body.static .rate-prompt, body.static #sec-rate_history { display: none !important; }
+  body.static .ro-note { display: block; }
+  .ro-note { display: none; color: var(--muted); font-size: 12px; margin-top: 2px; }
 </style>
 </head>
 <body>
 <header>
   <h1>Theater <span class="tag">Recommender</span></h1>
   <div class="summary" id="summary"></div>
+  <div class="ro-note">Read-only snapshot — open the local dashboard to rate &amp; triage.</div>
 </header>
 <div class="controls">
   <input id="search" type="search" placeholder="Search titles…">
@@ -358,14 +363,31 @@ renderAll();
 """
 
 
-def build_html(digest: Dict) -> str:
+def build_html(digest: Dict, static: bool = False) -> str:
     payload = dict(digest)
     payload["generated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return (
+    html = (
         TEMPLATE
         .replace("__DATA__", json.dumps(payload))
         .replace("__ACCENTS__", json.dumps(config.CLUSTER_ACCENTS))
     )
+    if static:
+        # Read-only published snapshot: CSS hides the decision controls.
+        html = html.replace("<body>", '<body class="static">', 1)
+    return html
+
+
+def publish_snapshot() -> Path:
+    """Render the current board to docs/index.html for GitHub Pages (read-only)."""
+    import db
+    from digest import build_digest
+
+    conn = db.connect()
+    digest = build_digest(conn, config.SCORE_THRESHOLD)
+    config.DOCS_DIR.mkdir(parents=True, exist_ok=True)
+    config.DOCS_INDEX.write_text(build_html(digest, static=True), encoding="utf-8")
+    logger.info("published snapshot: %s", config.DOCS_INDEX)
+    return config.DOCS_INDEX
 
 
 def render_dashboard(digest: Dict, out_path: Optional[Path] = None) -> Path:
@@ -388,5 +410,10 @@ def rebuild_from_db() -> Path:
 
 
 if __name__ == "__main__":
+    import sys
+
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    rebuild_from_db()
+    if "--publish" in sys.argv:
+        publish_snapshot()   # write docs/index.html for GitHub Pages
+    else:
+        rebuild_from_db()

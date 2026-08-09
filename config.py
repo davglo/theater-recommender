@@ -17,6 +17,10 @@ OUTPUT_DIR = BASE_DIR / "output"
 LOG_DIR = OUTPUT_DIR / "logs"
 DB_PATH = DATA_DIR / "recommender.db"
 DASHBOARD_PATH = OUTPUT_DIR / "dashboard.html"
+# Read-only snapshot published to GitHub Pages (committed; served at
+# https://<user>.github.io/theater-recommender/). Refreshed on each sync.
+DOCS_DIR = BASE_DIR / "docs"
+DOCS_INDEX = DOCS_DIR / "index.html"
 
 # --- Claude -----------------------------------------------------------------
 # Scoring runs through the Claude Code CLI headless (-p) on the subscription —
