@@ -1,0 +1,15 @@
+# Secrets — NEVER commit
+.env
+
+# Local runtime state (personal viewing history + generated output; regenerable)
+data/
+output/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# macOS
+.DS_Store

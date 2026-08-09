@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.dave.theaterrecommender.server</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/davidglogoza/Claude/theater-recommender/run_server.sh</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/Users/davidglogoza/Claude/theater-recommender/output/logs/server.out.log</string>
+  <key>StandardErrorPath</key><string>/Users/davidglogoza/Claude/theater-recommender/output/logs/server.err.log</string>
+</dict>
+</plist>
