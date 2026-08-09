@@ -42,8 +42,13 @@ TMDB_SLEEP_SECONDS = 0.25       # politeness delay between TMDB calls
 MOVIE_MAX_FRACTION = 0.25       # Dave watches series >> movies: cap movies at 25% of the pool
 
 # --- Write-back server ------------------------------------------------------
-SERVER_HOST = "127.0.0.1"
-SERVER_PORT = 8757              # 8753 job-finder, 8754 house-hunter, 8756 birding-partner
+SERVER_HOST = "127.0.0.1"      # advertised host (display only)
+SERVER_PORT = 8757             # 8753 job-finder, 8754 house-hunter, 8756 birding-partner
+# Bind address for the write-back server. "0.0.0.0" lets other devices on your
+# network (or Tailscale) reach the dashboard — needed for phone access. Set
+# back to "127.0.0.1" to lock it to this Mac only. No auth, so only expose it
+# on networks you trust (home WiFi, Tailscale).
+BIND_HOST = "0.0.0.0"
 
 # --- Clusters ---------------------------------------------------------------
 # Canonical names: profile, scorer, and dashboard all key off these exact strings.

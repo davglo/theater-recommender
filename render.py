@@ -115,7 +115,9 @@ TEMPLATE = """<!DOCTYPE html>
 <script>
 const DATA = __DATA__;
 const ACCENTS = __ACCENTS__;
-const SERVER = "http://__HOST__:__PORT__";
+const SERVER = "";  // same-origin: buttons post back to whatever host served
+                    // the page (localhost, Mac LAN IP, or Tailscale) — so the
+                    // dashboard works identically from the Mac or a phone.
 const IMG = "https://image.tmdb.org/t/p/w342";
 
 let activeCluster = "All";
@@ -363,8 +365,6 @@ def build_html(digest: Dict) -> str:
         TEMPLATE
         .replace("__DATA__", json.dumps(payload))
         .replace("__ACCENTS__", json.dumps(config.CLUSTER_ACCENTS))
-        .replace("__HOST__", config.SERVER_HOST)
-        .replace("__PORT__", str(config.SERVER_PORT))
     )
 
 

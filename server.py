@@ -137,4 +137,4 @@ if __name__ == "__main__":
     # PORT env override lets a second instance (e.g. a dev preview) coexist
     # with the launchd service on SERVER_PORT; both share the same SQLite DB.
     port = int(os.environ.get("PORT", config.SERVER_PORT))
-    uvicorn.run(app, host=config.SERVER_HOST, port=port, log_level="warning")
+    uvicorn.run(app, host=config.BIND_HOST, port=port, log_level="warning")
