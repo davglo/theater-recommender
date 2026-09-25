@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import config
 import db
-from tmdb_client import TMDBClient
+from tmdb_client import TMDBClient, normalize_result
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,26 @@ def dedupe_pool(candidates: List[Dict]) -> List[Dict]:
         if c["tmdb_id"] is None or key in seen:
             continue
         seen.add(key)
+        out.append(c)
+    return out
+
+
+def credits_to_candidates(credits: Dict, bucket: str) -> List[Dict]:
+    """Turn a TMDB combined_credits payload into candidates: behind-the-camera
+    (crew) work only — skips cameos and 'Self' appearances in docs — deduped
+    across the several jobs one person often holds on the same title."""
+    out: List[Dict] = []
+    seen: Set[Tuple[int, str]] = set()
+    for raw in credits.get("crew", []) or []:
+        media_type = raw.get("media_type")
+        if media_type not in ("movie", "tv") or raw.get("id") is None:
+            continue
+        key = (raw["id"], media_type)
+        if key in seen:
+            continue
+        seen.add(key)
+        c = normalize_result(raw, media_type)
+        c["source_bucket"] = bucket
         out.append(c)
     return out
 
@@ -79,15 +99,15 @@ def apply_cap(candidates: List[Dict], cap: int) -> List[Dict]:
 
 def pick_anchors(conn: sqlite3.Connection, per_run: int) -> List[sqlite3.Row]:
     """Rotating subset of the user's HIGH-SIGNAL titles to pull TMDB
-    recommendations from: 4-5★ seen docs and watchlist items. Scripted seed
-    titles (rating NULL, e.g. The Wire) are excluded — recommendations off them
-    return dramas, not documentaries. Rotates by run count for weekly variety."""
+    recommendations from: 4-5★ seen titles, watchlist items, and the original
+    hand-picked seed list (unrated favorites like The Wire, Peaky Blinders —
+    back in play now that scripted drama is a lane). Rotates by run count."""
     rows = conn.execute(
         """SELECT ts.tmdb_id, ts.media_type, t.title, ts.rating
            FROM title_status ts
            JOIN titles t ON t.tmdb_id = ts.tmdb_id AND t.media_type = ts.media_type
            WHERE ts.status = 'watchlist'
-              OR (ts.status = 'seen' AND ts.rating >= 4)
+              OR (ts.status = 'seen' AND (ts.rating >= 4 OR ts.source = 'seed'))
            ORDER BY ts.rating DESC, ts.tmdb_id"""
     ).fetchall()
     if not rows:
@@ -141,6 +161,7 @@ def _discover_cluster(tmdb: TMDBClient, cluster: Dict, date_gte: str) -> List[Di
                 vote_floor=spec["vote_floor"],
                 date_gte=date_gte,
                 page=page,
+                with_networks=spec.get("with_networks", ""),
             )
             for r in results:
                 r["source_bucket"] = cluster["name"]
@@ -159,6 +180,7 @@ def _discover_cluster(tmdb: TMDBClient, cluster: Dict, date_gte: str) -> List[Di
             date_gte=date_gte,
             page=1,
             sort_by=newest_date_field,
+            with_networks=spec.get("with_networks", ""),
         )
         for r in newest:
             r["source_bucket"] = cluster["name"]
@@ -191,6 +213,11 @@ def generate_pool(
         for r in recs:
             r["source_bucket"] = ANCHOR_BUCKET
         raw.extend(recs)
+
+    for person_id, name in config.BOOSTED_PEOPLE.items():
+        credited = credits_to_candidates(tmdb.person_credits(person_id), config.CLUSTER_PRESTIGE)
+        logger.info("boosted creator %s -> %d credits", name, len(credited))
+        raw.extend(credited)
 
     # Discover is filtered server-side via with_original_language, but anchor
     # recommendations aren't — filter everything here (English-only).

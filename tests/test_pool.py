@@ -5,8 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from candidate_pool import (apply_cap, dedupe_pool, drop_blocklisted,  # noqa: E402
-                            drop_known, select_pool)
+from candidate_pool import (apply_cap, credits_to_candidates,  # noqa: E402
+                            dedupe_pool, drop_blocklisted, drop_known, select_pool)
 from db import text_matches_blocklist  # noqa: E402
 
 
@@ -116,6 +116,28 @@ class TestSelectPool(unittest.TestCase):
         out = select_pool(self._mix(300, 10), cap=200, movie_max_fraction=0.25)
         self.assertEqual(len(out), 200)
         self.assertEqual(sum(1 for c in out if c["media_type"] == "movie"), 10)
+
+
+class TestCreditsToCandidates(unittest.TestCase):
+    def test_crew_only_deduped_and_tagged(self):
+        credits = {
+            "cast": [{"id": 9, "media_type": "movie", "title": "Cameo"}],
+            "crew": [
+                {"id": 1, "media_type": "movie", "title": "Snatch", "job": "Director"},
+                {"id": 1, "media_type": "movie", "title": "Snatch", "job": "Writer"},
+                {"id": 2, "media_type": "tv", "name": "MobLand", "job": "Director"},
+                {"id": 3, "media_type": "person", "name": "junk"},
+                {"id": None, "media_type": "movie", "title": "No id"},
+            ],
+        }
+        out = credits_to_candidates(credits, "Prestige")
+        self.assertEqual([(c["tmdb_id"], c["media_type"]) for c in out],
+                         [(1, "movie"), (2, "tv")])  # cast cameo, dupes, junk dropped
+        self.assertEqual(out[1]["title"], "MobLand")
+        self.assertTrue(all(c["source_bucket"] == "Prestige" for c in out))
+
+    def test_empty_payload(self):
+        self.assertEqual(credits_to_candidates({}, "Prestige"), [])
 
 
 if __name__ == "__main__":

@@ -95,6 +95,7 @@ class TMDBClient:
         date_gte: str,
         page: int = 1,
         sort_by: str = "popularity.desc",
+        with_networks: str = "",
     ) -> List[Dict]:
         date_field = "first_air_date.gte" if media_type == "tv" else "primary_release_date.gte"
         params: Dict = {
@@ -108,8 +109,14 @@ class TMDBClient:
         }
         if keyword_ids:
             params["with_keywords"] = "|".join(str(k) for k in keyword_ids)  # OR
+        if with_networks:
+            params["with_networks"] = with_networks  # TV only; pipe-separated = OR
         data = self._get(f"/discover/{media_type}", params)
         return [normalize_result(r, media_type) for r in data.get("results", [])]
+
+    def person_credits(self, person_id: int) -> Dict:
+        """Raw combined movie + TV credits for a person: {'cast': [...], 'crew': [...]}."""
+        return self._get(f"/person/{person_id}/combined_credits")
 
     def recommendations(self, media_type: str, tmdb_id: int, page: int = 1) -> List[Dict]:
         data = self._get(f"/{media_type}/{tmdb_id}/recommendations", {"page": page})

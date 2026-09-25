@@ -47,11 +47,26 @@ INITIAL_PROFILE: Dict = {
                         "corruption and scandal", "NOT music/nature/art/tech/general docs"],
             "notes": None,
         },
+        {
+            "name": config.CLUSTER_PRESTIGE,
+            "weight": 1.2,
+            "anchors": ["The Gentlemen", "MobLand", "Peaky Blinders", "Sons of Anarchy",
+                        "The Wire", "Mad Men", "Severance", "The White Lotus",
+                        "The Righteous Gemstones", "Peacemaker"],
+            "signals": ["gangster / crime sagas, British crime capers",
+                        "Guy Ritchie — anything he creates/directs/writes",
+                        "morally complex antihero leads, serialized",
+                        "dark / irreverent comedy, comedy-drama hybrids",
+                        "NOT sitcoms, procedurals, romance, teen, family"],
+            "notes": None,
+        },
     ],
-    "global_notes": "Nonfiction-only. Narrow subject focus: sports docs, true "
-                    "crime, and scams/fraud/cults — NOT music, nature, art, "
-                    "science/tech, food/travel, or general-interest docs. Strong "
-                    "preference for SERIES over films.",
+    "global_notes": "Three narrow documentary lanes (sports, true crime, "
+                    "scams/fraud/cults — NOT music, nature, art, science/tech, "
+                    "food/travel, or general-interest docs) plus one scripted "
+                    "lane: prestige drama, crime/gangster series, and dark "
+                    "comedy. Loves Guy Ritchie. Strong preference for SERIES "
+                    "over films.",
 }
 
 REDERIVE_SYSTEM_PROMPT = (

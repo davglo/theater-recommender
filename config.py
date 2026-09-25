@@ -56,25 +56,38 @@ BIND_HOST = "0.0.0.0"
 
 # --- Clusters ---------------------------------------------------------------
 # Canonical names: profile, scorer, and dashboard all key off these exact strings.
-# Scripted drama/comedy clusters were dropped 2026-07-06 — nonfiction only now.
+# Scripted was dropped 2026-07-06, then brought back 2026-09-25 as one broad
+# lane after Dave loved The Gentlemen + MobLand ("bring back all prestige drama").
 CLUSTER_TRUE_CRIME = "True Crime / Dark Nonfiction"
 CLUSTER_SPORTS_DOCS = "Sports & Wrestling Docs"
 # Reframed 2026-07-11 from generic "Other Nonfiction" (which fire-hosed
 # music/nature/art/tech docs Dave has zero interest in) to his actual third
 # love per his 5-star ratings: scams, cons, financial/corporate crime, cults.
 CLUSTER_SCAMS = "Scams, Scandal & Corruption"
+CLUSTER_PRESTIGE = "Prestige Drama & Crime Series"  # scripted: crime/gangster, prestige, dark comedy
 
 CLUSTER_NAMES: List[str] = [
     CLUSTER_TRUE_CRIME,
     CLUSTER_SPORTS_DOCS,
     CLUSTER_SCAMS,
+    CLUSTER_PRESTIGE,
 ]
 
 CLUSTER_ACCENTS: Dict[str, str] = {
     CLUSTER_TRUE_CRIME: "#ff6b6b",
     CLUSTER_SPORTS_DOCS: "#ffb454",
     CLUSTER_SCAMS: "#5fd4c4",
+    CLUSTER_PRESTIGE: "#4aa8ff",
 }
+
+# Creators Dave loves: their full TMDB credits are pulled into every pool, and
+# the scorer gives their work a bonus. {tmdb_person_id: name}
+BOOSTED_PEOPLE: Dict[int, str] = {956: "Guy Ritchie"}
+
+# HBO, Netflix, FX, AMC, Showtime, Starz, Apple TV, Prime Video, Hulu,
+# Paramount+, HBO Max, Sky Atlantic, Peacock, BBC One, BBC Two, Channel 4.
+PREMIUM_NETWORKS = "|".join(str(n) for n in (
+    49, 213, 88, 174, 67, 318, 2552, 1024, 453, 4330, 3186, 1063, 3353, 4, 332, 26))
 
 # Discover queries per cluster. Keyword strings are resolved to TMDB keyword
 # ids at runtime (never hardcode ids). Empty keywords = genre-only discover.
@@ -119,6 +132,22 @@ CLUSTERS: List[Dict] = [
              "keywords": ["fraud", "con artist", "scam", "ponzi scheme",
                           "financial crisis", "corruption", "cult", "scandal",
                           "white collar crime"], "vote_floor": 8},
+        ],
+    },
+    {
+        "name": CLUSTER_PRESTIGE,
+        # Scripted, so vote floors are much higher than for docs to keep
+        # quality up. Dark comedy mostly arrives via anchors (Gemstones,
+        # Peacemaker, The Gentlemen) rather than a noisy genre-35 firehose.
+        # TV is restricted to premium/streaming networks: a genre-only pull
+        # otherwise fills up with network procedurals (Chicago Fire, Blue
+        # Bloods, Castle). IDs verified against TMDB /network/{id}.
+        "discover": [
+            {"media_type": "tv", "with_genres": "80", "keywords": [], "vote_floor": 150,
+             "with_networks": PREMIUM_NETWORKS},
+            {"media_type": "tv", "with_genres": "18", "keywords": [], "vote_floor": 300,
+             "with_networks": PREMIUM_NETWORKS},
+            {"media_type": "movie", "with_genres": "80", "keywords": [], "vote_floor": 500},
         ],
     },
 ]
