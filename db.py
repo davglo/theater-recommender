@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS titles (
     popularity   REAL,            -- TMDB popularity at last fetch (buzz signal)
     recent_date  TEXT,            -- last 'release': movie release / TV latest season premiere
     latest_season INTEGER,        -- TV: season that recent_date belongs to
+    source_lane  TEXT,            -- lane (cluster) whose discover query found it
     added_at     TEXT NOT NULL,   -- ISO timestamp
     PRIMARY KEY (tmdb_id, media_type)
 );
@@ -105,7 +106,8 @@ def now_iso() -> str:
 _ADDED_COLUMNS = {
     "titles": {"release_date": "TEXT", "trailer_url": "TEXT",
                "original_language": "TEXT", "popularity": "REAL",
-               "recent_date": "TEXT", "latest_season": "INTEGER"},
+               "recent_date": "TEXT", "latest_season": "INTEGER",
+               "source_lane": "TEXT"},
     "title_status": {"rating": "INTEGER"},
 }
 
@@ -139,11 +141,12 @@ def upsert_title(conn: sqlite3.Connection, t: Dict) -> None:
         """INSERT INTO titles
                (tmdb_id, media_type, title, year, genres, keywords,
                 poster_path, overview, tmdb_rating, release_date, trailer_url,
-                original_language, popularity, recent_date, latest_season, added_at)
+                original_language, popularity, recent_date, latest_season,
+                source_lane, added_at)
            VALUES (:tmdb_id, :media_type, :title, :year, :genres, :keywords,
                    :poster_path, :overview, :tmdb_rating, :release_date, :trailer_url,
                    :original_language, :popularity, :recent_date, :latest_season,
-                   :added_at)
+                   :source_lane, :added_at)
            ON CONFLICT (tmdb_id, media_type) DO UPDATE SET
                title=excluded.title, year=excluded.year, genres=excluded.genres,
                keywords=excluded.keywords, poster_path=excluded.poster_path,
@@ -151,7 +154,8 @@ def upsert_title(conn: sqlite3.Connection, t: Dict) -> None:
                release_date=excluded.release_date, trailer_url=excluded.trailer_url,
                original_language=excluded.original_language,
                popularity=excluded.popularity, recent_date=excluded.recent_date,
-               latest_season=excluded.latest_season""",
+               latest_season=excluded.latest_season,
+               source_lane=COALESCE(excluded.source_lane, titles.source_lane)""",
         {
             "tmdb_id": t["tmdb_id"], "media_type": t["media_type"],
             "title": t["title"], "year": t.get("year"),
@@ -161,7 +165,8 @@ def upsert_title(conn: sqlite3.Connection, t: Dict) -> None:
             "trailer_url": t.get("trailer_url"),
             "original_language": t.get("original_language"),
             "popularity": t.get("popularity"), "recent_date": t.get("recent_date"),
-            "latest_season": t.get("latest_season"), "added_at": now_iso(),
+            "latest_season": t.get("latest_season"),
+            "source_lane": t.get("source_lane"), "added_at": now_iso(),
         },
     )
 
@@ -209,16 +214,18 @@ def set_status(
     )
 
 
-def known_keys(conn: sqlite3.Connection) -> Set[Tuple[int, str]]:
+def known_keys(conn: sqlite3.Connection, include_scored: bool = True) -> Set[Tuple[int, str]]:
     """Every (tmdb_id, media_type) that must never re-enter the candidate pool:
-    anything with a status (seen/rejected/pending/watchlist), a cached score
-    (including sub-threshold titles that never got a status), or a live
-    rate-history prompt (don't recommend what we're asking the user to rate)."""
+    anything with a status (seen/rejected/pending/watchlist), a live
+    rate-history prompt, and — when include_scored — a cached score (incl.
+    sub-threshold titles that never got a status). With fit scoring off, old
+    scores shouldn't hide anything, so pass include_scored=False."""
     keys: Set[Tuple[int, str]] = set()
     for row in conn.execute("SELECT tmdb_id, media_type FROM title_status"):
         keys.add((row["tmdb_id"], row["media_type"]))
-    for row in conn.execute("SELECT tmdb_id, media_type FROM scores"):
-        keys.add((row["tmdb_id"], row["media_type"]))
+    if include_scored:
+        for row in conn.execute("SELECT tmdb_id, media_type FROM scores"):
+            keys.add((row["tmdb_id"], row["media_type"]))
     for row in conn.execute("SELECT tmdb_id, media_type FROM rate_prompts"):
         keys.add((row["tmdb_id"], row["media_type"]))
     return keys

@@ -101,7 +101,7 @@ class TestBuildDigest(unittest.TestCase):
         self._title(6, "seen", fit=95, release_date=RECENT_DATE)          # never rendered
         self._title(7, "pending", fit=60, release_date=None)              # recommendation, unknown date
 
-        d = build_digest(self.conn, threshold=40)
+        d = build_digest(self.conn, threshold=40, fit_scoring=True)
         self.assertEqual([x["tmdb_id"] for x in d["recent"]], [1])
         self.assertEqual([x["tmdb_id"] for x in d["older"]], [3, 7, 2])  # fit desc
         self.assertEqual([x["tmdb_id"] for x in d["watchlist"]], [5])
@@ -124,7 +124,7 @@ class TestBuildDigest(unittest.TestCase):
         # 12 already rated -> should NOT appear in the wall
         db.set_status(self.conn, 12, "tv", "seen", "manual", decided=True, rating=4)
 
-        d = build_digest(self.conn, threshold=40)
+        d = build_digest(self.conn, threshold=40, fit_scoring=True)
         ids = [x["tmdb_id"] for x in d["rate_history"]]
         self.assertEqual(ids, [11, 10])  # tmdb_rating desc, decided one excluded
         self.assertEqual(d["summary"]["rate_history_count"], 2)
@@ -132,9 +132,9 @@ class TestBuildDigest(unittest.TestCase):
     def test_clear_rate_prompt_removes_from_wall(self):
         self._bare_title(20, rating=8.0)
         db.add_rate_prompt(self.conn, 20, "tv")
-        self.assertEqual(len(build_digest(self.conn, 40)["rate_history"]), 1)
+        self.assertEqual(len(build_digest(self.conn, 40, fit_scoring=True)["rate_history"]), 1)
         db.clear_rate_prompt(self.conn, 20, "tv")
-        self.assertEqual(len(build_digest(self.conn, 40)["rate_history"]), 0)
+        self.assertEqual(len(build_digest(self.conn, 40, fit_scoring=True)["rate_history"]), 0)
 
 
 def _item(tid, cluster, fit, pop):
@@ -187,7 +187,7 @@ class TestOlderGemsCap(unittest.TestCase):
             db.insert_score(conn, {"tmdb_id": i, "media_type": "tv", "cluster": "C",
                                    "fit_score": 50 + i, "why": "w", "dealbreakers": None,
                                    "scored_at": "2026-01-01T00:00:00+00:00", "profile_ver": 1})
-        d = build_digest(conn, threshold=40)
+        d = build_digest(conn, threshold=40, fit_scoring=True)
         self.assertEqual(len(d["older"]), config.OLDER_GEMS_CAP)
         self.assertEqual(d["older"][0]["tmdb_id"], n - 1)      # highest fit first
         self.assertEqual(d["summary"]["older_total"], n)
@@ -202,9 +202,63 @@ class TestOlderGemsCap(unittest.TestCase):
         db.insert_score(conn, {"tmdb_id": 1, "media_type": "tv", "cluster": "C",
                                "fit_score": 80, "why": "w", "dealbreakers": None,
                                "scored_at": "2026-01-01T00:00:00+00:00", "profile_ver": 1})
-        d = build_digest(conn, threshold=40)
+        d = build_digest(conn, threshold=40, fit_scoring=True)
         self.assertEqual([x["tmdb_id"] for x in d["recent"]], [1])
         self.assertTrue(d["recent"][0]["recency_label"].startswith("New season 3"))
+
+
+class TestScoringOff(unittest.TestCase):
+    """FIT_SCORING off: no fit gate, newest first, lane from discover, no Older Gems."""
+
+    def setUp(self):
+        self.conn = db.connect(Path(":memory:"))
+
+    def _pending(self, tid, recent_date, pop=1.0, lane="True Crime / Dark Nonfiction", fit=None):
+        db.upsert_title(self.conn, {"tmdb_id": tid, "media_type": "tv", "title": f"T{tid}",
+                                    "year": 2026, "recent_date": recent_date,
+                                    "popularity": pop, "source_lane": lane})
+        db.set_status(self.conn, tid, "tv", "pending", "weekly_run", decided=False)
+        if fit is not None:
+            db.insert_score(self.conn, {"tmdb_id": tid, "media_type": "tv", "cluster": "Scored Lane",
+                                        "fit_score": fit, "why": "w", "dealbreakers": None,
+                                        "scored_at": "2026-01-01T00:00:00+00:00", "profile_ver": 1})
+
+    def test_unscored_recent_shows_newest_first(self):
+        self._pending(1, days_ago(40))
+        self._pending(2, days_ago(2))
+        self._pending(3, days_ago(2), pop=50.0)   # same day, more popular -> first
+        self._pending(4, OLD_DATE)                 # outside the window -> nowhere
+        d = build_digest(self.conn, threshold=40, fit_scoring=False)
+        self.assertEqual([x["tmdb_id"] for x in d["recent"]], [3, 2, 1])
+        self.assertEqual(d["older"], [])
+        self.assertEqual(d["summary"]["older_total"], 1)
+        self.assertFalse(d["summary"]["fit_scoring"])
+
+    def test_fit_hidden_and_lane_from_discover(self):
+        self._pending(1, days_ago(5), lane="Sports & Wrestling Docs")
+        self._pending(2, days_ago(6), fit=30)   # previously scored low: still shows
+        d = build_digest(self.conn, threshold=40, fit_scoring=False)
+        items = {x["tmdb_id"]: x for x in d["recent"]}
+        self.assertEqual(set(items), {1, 2})
+        self.assertIsNone(items[2]["fit_score"])
+        self.assertEqual(items[2]["why"], "")
+        self.assertEqual(items[1]["cluster"], "Sports & Wrestling Docs")
+        self.assertEqual(items[2]["cluster"], "Scored Lane")   # score's lane wins if present
+
+    def test_classify_without_fit(self):
+        self.assertEqual(classify("pending", None, 40, RECENT_DATE, require_fit=False), "recent")
+        self.assertEqual(classify("pending", 5, 40, OLD_DATE, require_fit=False), "older")
+        self.assertIsNone(classify("not_interested", None, 40, RECENT_DATE, require_fit=False))
+
+    def test_known_keys_can_ignore_scores(self):
+        self._pending(1, days_ago(5))
+        db.upsert_title(self.conn, {"tmdb_id": 9, "media_type": "tv", "title": "Scored only", "year": 2026})
+        db.insert_score(self.conn, {"tmdb_id": 9, "media_type": "tv", "cluster": "C", "fit_score": 20,
+                                    "why": "w", "dealbreakers": None,
+                                    "scored_at": "2026-01-01T00:00:00+00:00", "profile_ver": 1})
+        self.assertIn((9, "tv"), db.known_keys(self.conn))
+        self.assertNotIn((9, "tv"), db.known_keys(self.conn, include_scored=False))
+        self.assertIn((1, "tv"), db.known_keys(self.conn, include_scored=False))
 
 
 if __name__ == "__main__":

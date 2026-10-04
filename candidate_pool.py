@@ -228,20 +228,24 @@ def generate_pool(
         logger.info("discover %-28s -> %d results", cluster["name"], len(found))
         raw.extend(found)
 
-    for media_type in ("tv", "movie"):
-        for page in range(1, config.TRENDING_PAGES + 1):
-            for r in tmdb.trending(media_type, page):
-                r["source_bucket"] = TRENDING_BUCKET
-                raw.append(r)
+    # Trending + "similar to your favorites" are broad and lane-less; they only
+    # work with the fit scorer cleaning them up, so they're off with scoring off.
+    anchor_titles: List[str] = []
+    if config.FIT_SCORING:
+        for media_type in ("tv", "movie"):
+            for page in range(1, config.TRENDING_PAGES + 1):
+                for r in tmdb.trending(media_type, page):
+                    r["source_bucket"] = TRENDING_BUCKET
+                    raw.append(r)
 
-    anchors = pick_anchors(conn, config.ANCHORS_PER_RUN)
-    anchor_titles = [a["title"] for a in anchors]
-    logger.info("anchors this run: %s", anchor_titles)
-    for a in anchors:
-        recs = tmdb.recommendations(a["media_type"], a["tmdb_id"])
-        for r in recs:
-            r["source_bucket"] = ANCHOR_BUCKET
-        raw.extend(recs)
+        anchors = pick_anchors(conn, config.ANCHORS_PER_RUN)
+        anchor_titles = [a["title"] for a in anchors]
+        logger.info("anchors this run: %s", anchor_titles)
+        for a in anchors:
+            recs = tmdb.recommendations(a["media_type"], a["tmdb_id"])
+            for r in recs:
+                r["source_bucket"] = ANCHOR_BUCKET
+            raw.extend(recs)
 
     for person_id, name in config.BOOSTED_PEOPLE.items():
         credited = credits_to_candidates(tmdb.person_credits(person_id), config.CLUSTER_PRESTIGE)
@@ -253,7 +257,7 @@ def generate_pool(
     raw = dedupe_pool([r for r in raw
                        if r.get("original_language") in (None, config.ORIGINAL_LANGUAGE)])
 
-    pool = drop_known(raw, db.known_keys(conn))
+    pool = drop_known(raw, db.known_keys(conn, include_scored=config.FIT_SCORING))
     novel = len(pool)
     pool = prefilter_recent(pool, start, end)
     pool = drop_blocklisted(pool, db.blocklist_terms(conn))

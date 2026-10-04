@@ -32,6 +32,14 @@ SCORER_CHUNK_SIZE = 20          # candidates per scoring call
 # --- Pipeline tunables ------------------------------------------------------
 POOL_CAP = 200                  # max novel titles per weekly run
 SCORE_THRESHOLD = 40            # below this: never rendered, never re-scored
+# OFF since 2026-10-04 at Dave's request ("get rid of my scoring for now,
+# prioritize recency"): no Claude calls at all — every recent title that passes
+# the lane/English/blocklist filters goes on the board, newest first, and the
+# Nope button is the filter. Flip to True to restore fit scoring, profile
+# re-derivation, trending/anchor sourcing, buzz ranking and Older Gems.
+# (Re-enabling: unscored pending titles need scoring — resume_scoring.py skips
+# titles that already have a status, so adjust it first.)
+FIT_SCORING = False
 REDERIVE_INTERVAL = 20          # manual decisions between profile re-derivations
 # Recent-releases-only board (2026-10-04): sourcing, filtering and the main
 # section all key off this window. A TV show counts if a season PREMIERED in it.

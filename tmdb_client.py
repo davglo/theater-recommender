@@ -179,6 +179,10 @@ def detail_to_title_row(d: Dict) -> Dict:
         "release_date": d["release_date"], "trailer_url": d["trailer_url"],
         "original_language": d["original_language"], "popularity": d["popularity"],
         "recent_date": d["recent_date"], "latest_season": d["latest_season"],
+        # Only real lanes (anchor/trending buckets start with "_"); db upsert
+        # COALESCEs, so callers without a bucket never erase a stored lane.
+        "source_lane": (d.get("source_bucket")
+                        if d.get("source_bucket") in config.CLUSTER_NAMES else None),
     }
 
 

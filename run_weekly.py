@@ -80,7 +80,9 @@ def main() -> int:
     else:
         profile_row = profile_mod.ensure_initial_profile(conn)
         due, n_decisions = profile_mod.rederive_due(conn)
-        if due or args.force_profile_refresh:
+        if not config.FIT_SCORING:
+            logger.info("fit scoring off — skipping profile re-derivation")
+        elif due or args.force_profile_refresh:
             logger.info("re-deriving profile (%d decisions since v%d)",
                         n_decisions, profile_row["version"])
             new_ver = profile_mod.rederive_profile(conn)
@@ -100,10 +102,13 @@ def main() -> int:
     logger.info("pool: %d novel candidates (%d TMDB calls)", len(pool), tmdb.call_count)
 
     # 3. Score novel candidates (dry-run prints the prompt and stops writing).
-    scored, score_calls = scorer.score_candidates(
-        conn, pool, profile_row, dry_run=args.dry_run
-    )
-    claude_calls += score_calls
+    #    With fit scoring off there are no Claude calls at all.
+    scored: list = []
+    if config.FIT_SCORING:
+        scored, score_calls = scorer.score_candidates(
+            conn, pool, profile_row, dry_run=args.dry_run
+        )
+        claude_calls += score_calls
 
     if args.dry_run:
         logger.info("dry run complete: %d candidates, %d TMDB calls, no writes",
@@ -116,14 +121,23 @@ def main() -> int:
         "SELECT COUNT(*) AS n FROM title_status WHERE status='pending'"
     ).fetchone()["n"]
     above = 0
-    for s in scored:
-        if s["fit_score"] >= config.SCORE_THRESHOLD:
-            db.set_status(conn, s["tmdb_id"], s["media_type"],
+    if config.FIT_SCORING:
+        for s in scored:
+            if s["fit_score"] >= config.SCORE_THRESHOLD:
+                db.set_status(conn, s["tmdb_id"], s["media_type"],
+                              status="pending", source="weekly_run", decided=False)
+                above += 1
+        logger.info("scored %d candidates: %d above threshold (%d)",
+                    len(scored), above, config.SCORE_THRESHOLD)
+    else:
+        # No scorer: every in-window candidate that survived the pool's
+        # lane/English/blocklist/already-decided filters goes on the board.
+        for c in pool:
+            db.set_status(conn, c["tmdb_id"], c["media_type"],
                           status="pending", source="weekly_run", decided=False)
             above += 1
+        logger.info("fit scoring off: %d recent titles added to the board", above)
     conn.commit()
-    logger.info("scored %d candidates: %d above threshold (%d)",
-                len(scored), above, config.SCORE_THRESHOLD)
 
     # 5. Digest + dashboard (dashboard sections are recency-based, not tied
     #    to this run — see digest.py).
@@ -144,7 +158,7 @@ def main() -> int:
     conn.commit()
     summary = result["summary"]
     logger.info(
-        "run %d complete: %d newly scored above threshold, %d pending before "
+        "run %d complete: %d added to the board, %d pending before "
         "this run | dashboard: %d new releases, %d older gems, %d watchlist | "
         "tmdb=%d claude=%d | dashboard: %s",
         run_id, above, pending_before, summary["recent_count"],

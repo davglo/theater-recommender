@@ -116,7 +116,7 @@ TEMPLATE = """<!DOCTYPE html>
 </section>
 <section id="sec-watchlist"><h2>Watchlist</h2><div class="grid"></div></section>
 <section id="sec-recent"><h2>New Releases &middot; Last 3 Months</h2>
-  <div class="sec-hint">Ranked by taste fit + buzz. &#128293; = trending right now in its lane.</div>
+  <div class="sec-hint" id="recent-hint"></div>
   <div class="grid"></div></section>
 <section id="sec-older"><h2>Older Gems</h2>
   <div class="sec-hint">Your top older picks that are still waiting.</div>
@@ -151,6 +151,7 @@ function card(item, section) {
   el.dataset.cluster = item.cluster;
   el.dataset.title = (item.title || "").toLowerCase();
   const col = accent(item.cluster);
+  const hasFit = item.fit_score != null;   // null when fit scoring is off
   let age = "";
   if (section === "recent" && item.recency_label) {
     age = `<span class="age">${esc(item.recency_label)}</span>` +
@@ -176,12 +177,12 @@ function card(item, section) {
         <span class="meta">${item.year || ""}</span>
         <span class="badge">${item.media_type}</span>${age}</div>
       <div class="cluster" style="color:${col}">${esc(item.cluster)}</div>
-      <div class="fitbar"><div style="width:${item.fit_score}%;background:${col}"></div></div>
+      ${hasFit ? `<div class="fitbar"><div style="width:${item.fit_score}%;background:${col}"></div></div>` : ""}
       <div class="overview">${esc(truncate(item.overview, 320))}</div>
-      <div class="why">${esc(item.why)}</div>
+      ${item.why ? `<div class="why">${esc(item.why)}</div>` : ""}
       ${deal}
       <div class="foot">
-        <span><span class="fit" style="color:${col}">${item.fit_score}</span>
+        <span>${hasFit ? `<span class="fit" style="color:${col}">${item.fit_score}</span>` : ""}
           <span class="rating">&nbsp;TMDB ${item.tmdb_rating ? Number(item.tmdb_rating).toFixed(1) : "–"}</span>
           ${trailer ? " &nbsp;" + trailer : ""}</span>
         <span class="btns">${buttons}</span>
@@ -303,7 +304,7 @@ function toast(msg) {
 }
 
 // Sections that vanish entirely when empty (rather than showing "Nothing here").
-const HIDE_WHEN_EMPTY = new Set(["watchlist", "rate_history"]);
+const HIDE_WHEN_EMPTY = new Set(["watchlist", "rate_history", "older"]);
 
 function renderAll() {
   for (const section of ["rate_history", "watchlist", "recent", "older"]) {
@@ -356,8 +357,12 @@ document.getElementById("search").addEventListener("input", e => {
 const s = DATA.summary;
 document.getElementById("summary").textContent =
   `${s.rate_history_count ? s.rate_history_count + " to rate · " : ""}` +
-  `${s.recent_count} new releases · ${s.older_count} older gems · ` +
+  `${s.recent_count} new releases · ` +
+  `${s.fit_scoring ? s.older_count + " older gems · " : ""}` +
   `${s.watchlist_count} on watchlist · generated ${DATA.generated_at}`;
+document.getElementById("recent-hint").innerHTML = s.fit_scoring
+  ? "Ranked by taste fit + buzz. &#128293; = trending right now in its lane."
+  : "Newest first. Hit Nope on anything that isn't for you.";
 buildChips();
 renderAll();
 </script>

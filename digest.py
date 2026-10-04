@@ -69,13 +69,15 @@ def classify(
     fit_score: Optional[int],
     threshold: int,
     recent_date: Optional[str],
+    require_fit: bool = True,
 ) -> Optional[str]:
-    """Pure section classifier. Returns 'recent'|'older'|'watchlist'|None."""
+    """Pure section classifier. Returns 'recent'|'older'|'watchlist'|None.
+    require_fit=False (fit scoring off): unscored pending titles still show."""
     if status == "watchlist":
         return "watchlist"
     if status != "pending":
         return None  # seen / not_interested / no status: never rendered
-    if fit_score is None or fit_score < threshold:
+    if require_fit and (fit_score is None or fit_score < threshold):
         return None
     return "recent" if is_recent_release(recent_date) else "older"
 
@@ -109,13 +111,18 @@ def weeks_ago(scored_at: Optional[str]) -> int:
     return max(0, (datetime.now(timezone.utc) - then).days // 7)
 
 
-def build_digest(conn: sqlite3.Connection, threshold: int) -> Dict:
-    """Assemble dashboard sections from the DB (see module docstring)."""
+def build_digest(conn: sqlite3.Connection, threshold: int,
+                 fit_scoring: Optional[bool] = None) -> Dict:
+    """Assemble dashboard sections from the DB (see module docstring).
+    With fit scoring off (config.FIT_SCORING, overridable for tests): no fit
+    gate, no buzz, recent sorted newest first, Older Gems empty."""
+    scoring = config.FIT_SCORING if fit_scoring is None else fit_scoring
     rows = conn.execute(
         """SELECT t.tmdb_id, t.media_type, t.title, t.year, t.genres,
                   t.poster_path, t.overview, t.tmdb_rating, t.trailer_url,
                   COALESCE(t.recent_date, t.release_date) AS recent_date,
-                  t.latest_season, t.popularity, ts.status, s.cluster,
+                  t.latest_season, t.popularity, ts.status,
+                  COALESCE(s.cluster, t.source_lane) AS cluster,
                   s.fit_score, s.why, s.dealbreakers, s.scored_at
            FROM title_status ts
            JOIN titles t ON t.tmdb_id = ts.tmdb_id AND t.media_type = ts.media_type
@@ -125,7 +132,8 @@ def build_digest(conn: sqlite3.Connection, threshold: int) -> Dict:
 
     sections: Dict[str, List[Dict]] = {"recent": [], "older": [], "watchlist": []}
     for r in rows:
-        section = classify(r["status"], r["fit_score"], threshold, r["recent_date"])
+        section = classify(r["status"], r["fit_score"], threshold, r["recent_date"],
+                           require_fit=scoring)
         if section is None:
             continue
         days = days_since_release(r["recent_date"])
@@ -140,8 +148,9 @@ def build_digest(conn: sqlite3.Connection, threshold: int) -> Dict:
             "tmdb_rating": r["tmdb_rating"],
             "trailer_url": r["trailer_url"],
             "cluster": r["cluster"] or "Unclustered",
-            "fit_score": r["fit_score"] if r["fit_score"] is not None else 0,
-            "why": r["why"] or "",
+            # Hidden (None / "") with scoring off, even for titles scored earlier.
+            "fit_score": (r["fit_score"] or 0) if scoring else None,
+            "why": (r["why"] or "") if scoring else "",
             "dealbreakers": r["dealbreakers"],
             "popularity": r["popularity"],
             "weeks_ago": weeks_ago(r["scored_at"]),
@@ -149,12 +158,21 @@ def build_digest(conn: sqlite3.Connection, threshold: int) -> Dict:
             "recency_label": recency_label(r["media_type"], r["latest_season"], days),
         })
 
-    apply_buzz(sections["recent"])
-    sections["recent"].sort(key=lambda x: (-x["rank_score"], -x["fit_score"]))
-    sections["older"].sort(key=lambda x: -x["fit_score"])
     older_total = len(sections["older"])
-    sections["older"] = sections["older"][:config.OLDER_GEMS_CAP]
-    sections["watchlist"].sort(key=lambda x: -x["fit_score"])
+    if scoring:
+        apply_buzz(sections["recent"])
+        sections["recent"].sort(key=lambda x: (-x["rank_score"], -x["fit_score"]))
+        sections["older"].sort(key=lambda x: -x["fit_score"])
+        sections["older"] = sections["older"][:config.OLDER_GEMS_CAP]
+        sections["watchlist"].sort(key=lambda x: -x["fit_score"])
+    else:
+        # Recency first: newest release on top; popularity breaks same-day ties.
+        def newest_first(x: Dict) -> tuple:
+            days = x["days_since_release"]
+            return (days if days is not None else 10 ** 6, -(x["popularity"] or 0.0))
+        sections["recent"].sort(key=newest_first)
+        sections["watchlist"].sort(key=newest_first)
+        sections["older"] = []   # "Older Gems" is a fit ranking; meaningless unscored
 
     rate_history = _rate_history_items(conn)
 
@@ -168,6 +186,7 @@ def build_digest(conn: sqlite3.Connection, threshold: int) -> Dict:
             "recent_count": len(sections["recent"]),
             "older_count": len(sections["older"]),
             "older_total": older_total,
+            "fit_scoring": scoring,
             "watchlist_count": len(sections["watchlist"]),
         },
     }
