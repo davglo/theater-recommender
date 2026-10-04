@@ -86,6 +86,7 @@ TEMPLATE = """<!DOCTYPE html>
                  border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; }
   .btns button:hover { border-color: var(--accent); }
   .age { color: var(--muted); font-size: 11px; margin-left: 6px; }
+  .hot { color: #ffb454; font-size: 11px; font-weight: 600; }
   .empty { color: var(--muted); font-size: 13px; }
   #toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
            background: var(--bad); color: #14181d; font-weight: 600; padding: 10px 18px;
@@ -114,8 +115,12 @@ TEMPLATE = """<!DOCTYPE html>
   <div class="grid"></div>
 </section>
 <section id="sec-watchlist"><h2>Watchlist</h2><div class="grid"></div></section>
-<section id="sec-recent"><h2>Recently Released &middot; Last 6 Months</h2><div class="grid"></div></section>
-<section id="sec-recommendations"><h2>Recommendations &middot; Older</h2><div class="grid"></div></section>
+<section id="sec-recent"><h2>New Releases &middot; Last 3 Months</h2>
+  <div class="sec-hint">Ranked by taste fit + buzz. &#128293; = trending right now in its lane.</div>
+  <div class="grid"></div></section>
+<section id="sec-older"><h2>Older Gems</h2>
+  <div class="sec-hint">Your top older picks that are still waiting.</div>
+  <div class="grid"></div></section>
 <div id="toast"></div>
 <script>
 const DATA = __DATA__;
@@ -147,10 +152,10 @@ function card(item, section) {
   el.dataset.title = (item.title || "").toLowerCase();
   const col = accent(item.cluster);
   let age = "";
-  if (section === "recent" && item.days_since_release != null) {
-    const d = item.days_since_release;
-    age = `<span class="age">released ${d === 0 ? "today" : d + " day" + (d > 1 ? "s" : "") + " ago"}</span>`;
-  } else if (section === "recommendations" && item.weeks_ago > 0) {
+  if (section === "recent" && item.recency_label) {
+    age = `<span class="age">${esc(item.recency_label)}</span>` +
+          (item.hot ? ` <span class="hot">&#128293; trending</span>` : "");
+  } else if (section === "older" && item.weeks_ago > 0) {
     age = `<span class="age">recommended ${item.weeks_ago} wk${item.weeks_ago > 1 ? "s" : ""} ago</span>`;
   }
   const deal = item.dealbreakers
@@ -301,15 +306,13 @@ function toast(msg) {
 const HIDE_WHEN_EMPTY = new Set(["watchlist", "rate_history"]);
 
 function renderAll() {
-  for (const section of ["rate_history", "watchlist", "recent", "recommendations"]) {
+  for (const section of ["rate_history", "watchlist", "recent", "older"]) {
     const sec = document.getElementById("sec-" + section);
     const grid = sec.querySelector(".grid");
     grid.innerHTML = "";
-    // Pure score order (server already sorts by fit_score desc); cluster is a
-    // filter chip, not a grouping. Rate-history keeps the server's acclaim order.
-    const items = section === "rate_history"
-      ? DATA[section].slice()
-      : DATA[section].slice().sort((a, b) => b.fit_score - a.fit_score);
+    // Keep the server's order: recent = fit + buzz, older/watchlist = fit,
+    // rate-history = acclaim. Cluster is a filter chip, not a grouping.
+    const items = DATA[section].slice();
     let shown = 0;
     for (const item of items) {
       if (section !== "rate_history" && activeCluster !== "All" && item.cluster !== activeCluster) continue;
@@ -353,7 +356,7 @@ document.getElementById("search").addEventListener("input", e => {
 const s = DATA.summary;
 document.getElementById("summary").textContent =
   `${s.rate_history_count ? s.rate_history_count + " to rate · " : ""}` +
-  `${s.recent_count} recently released · ${s.recommendations_count} recommendations · ` +
+  `${s.recent_count} new releases · ${s.older_count} older gems · ` +
   `${s.watchlist_count} on watchlist · generated ${DATA.generated_at}`;
 buildChips();
 renderAll();

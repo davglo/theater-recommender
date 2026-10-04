@@ -4,8 +4,10 @@ Counts every HTTP call (logged to the runs table) and sleeps briefly between
 calls to stay polite. Supports both v3 API keys (query param) and v4 read
 access tokens (Bearer header) — TMDB hands out both.
 """
+import json
 import logging
 import time
+from datetime import date
 from typing import Dict, List, Optional
 
 import requests
@@ -93,18 +95,23 @@ class TMDBClient:
         keyword_ids: List[int],
         vote_floor: int,
         date_gte: str,
+        date_lte: str,
         page: int = 1,
         sort_by: str = "popularity.desc",
         with_networks: str = "",
     ) -> List[Dict]:
-        date_field = "first_air_date.gte" if media_type == "tv" else "primary_release_date.gte"
+        """TV filters on EPISODE air dates (air_date.*), so returning shows with a
+        new season in the window are found, not just brand-new series. Movies
+        filter on primary release date."""
+        prefix = "air_date" if media_type == "tv" else "primary_release_date"
         params: Dict = {
             "with_genres": with_genres,
             "vote_count.gte": vote_floor,
             "sort_by": sort_by,
             "include_adult": "false",
             "with_original_language": config.ORIGINAL_LANGUAGE,
-            date_field: date_gte,
+            f"{prefix}.gte": date_gte,
+            f"{prefix}.lte": date_lte,
             "page": page,
         }
         if keyword_ids:
@@ -112,6 +119,11 @@ class TMDBClient:
         if with_networks:
             params["with_networks"] = with_networks  # TV only; pipe-separated = OR
         data = self._get(f"/discover/{media_type}", params)
+        return [normalize_result(r, media_type) for r in data.get("results", [])]
+
+    def trending(self, media_type: str, page: int = 1) -> List[Dict]:
+        """This week's trending titles (TMDB) — the buzz source for new drops."""
+        data = self._get(f"/trending/{media_type}/week", {"page": page})
         return [normalize_result(r, media_type) for r in data.get("results", [])]
 
     def person_credits(self, person_id: int) -> Dict:
@@ -137,7 +149,37 @@ class TMDBClient:
         ]
         videos = (data.get("videos", {}) or {}).get("results", []) or []
         out["trailer_url"] = _pick_trailer_url(videos)
+        out["latest_season"], out["recent_date"] = None, out["release_date"]
+        if media_type == "tv":
+            season = latest_aired_season(data.get("seasons") or [], date.today().isoformat())
+            if season:
+                out["latest_season"] = season["season_number"]
+                out["recent_date"] = season["air_date"]
         return out
+
+
+def latest_aired_season(seasons: List[Dict], today: str) -> Optional[Dict]:
+    """Highest-numbered real season (skips 0 = 'Specials') that has premiered
+    by `today`. Its premiere date is when the show last 'released' — a new
+    season of an old show counts as a recent release."""
+    aired = [s for s in seasons
+             if (s.get("season_number") or 0) > 0 and s.get("air_date")
+             and s["air_date"] <= today]
+    return max(aired, key=lambda s: s["season_number"], default=None)
+
+
+def detail_to_title_row(d: Dict) -> Dict:
+    """Map details() output to a db.upsert_title row (one place, so every
+    caller stores the same columns)."""
+    return {
+        "tmdb_id": d["tmdb_id"], "media_type": d["media_type"], "title": d["title"],
+        "year": d["year"], "genres": json.dumps(d["genre_names"]),
+        "keywords": json.dumps(d["keyword_names"]), "poster_path": d["poster_path"],
+        "overview": d["overview"], "tmdb_rating": d["tmdb_rating"],
+        "release_date": d["release_date"], "trailer_url": d["trailer_url"],
+        "original_language": d["original_language"], "popularity": d["popularity"],
+        "recent_date": d["recent_date"], "latest_season": d["latest_season"],
+    }
 
 
 def _pick_trailer_url(videos: List[Dict]) -> Optional[str]:

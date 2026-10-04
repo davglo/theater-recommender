@@ -9,13 +9,12 @@ Usage:
     python3 backfill_metadata.py --limit 10    # test on a small batch
 """
 import argparse
-import json
 import logging
 import sys
 
 import config
 import db
-from tmdb_client import TMDBClient
+from tmdb_client import TMDBClient, detail_to_title_row
 
 logger = logging.getLogger("backfill_metadata")
 
@@ -51,20 +50,7 @@ def main() -> int:
             logger.warning("failed to fetch %s/%s: %s", r["tmdb_id"], r["media_type"], exc)
             failed += 1
             continue
-        db.upsert_title(conn, {
-            "tmdb_id": detail["tmdb_id"],
-            "media_type": detail["media_type"],
-            "title": detail["title"],
-            "year": detail["year"],
-            "genres": json.dumps(detail["genre_names"]),
-            "keywords": json.dumps(detail["keyword_names"]),
-            "poster_path": detail["poster_path"],
-            "overview": detail["overview"],
-            "tmdb_rating": detail["tmdb_rating"],
-            "release_date": detail["release_date"],
-            "trailer_url": detail["trailer_url"],
-            "original_language": detail["original_language"],
-        })
+        db.upsert_title(conn, detail_to_title_row(detail))
         updated += 1
         if updated % 25 == 0:
             conn.commit()

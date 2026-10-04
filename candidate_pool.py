@@ -6,7 +6,6 @@ Standalone dry-run (no DB writes, no details calls):
     python3 candidate_pool.py --dry-run [--limit N]
 """
 import argparse
-import json
 import logging
 import sqlite3
 from datetime import date, timedelta
@@ -14,11 +13,12 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import config
 import db
-from tmdb_client import TMDBClient, normalize_result
+from tmdb_client import TMDBClient, detail_to_title_row, normalize_result
 
 logger = logging.getLogger(__name__)
 
-ANCHOR_BUCKET = "_anchor_similar"  # quota bucket for recommendation-sourced candidates
+ANCHOR_BUCKET = "_anchor_similar"
+TRENDING_BUCKET = "_trending"  # quota bucket for recommendation-sourced candidates
 
 
 def dedupe_pool(candidates: List[Dict]) -> List[Dict]:
@@ -52,6 +52,24 @@ def credits_to_candidates(credits: Dict, bucket: str) -> List[Dict]:
         c["source_bucket"] = bucket
         out.append(c)
     return out
+
+
+def recent_window(today: Optional[date] = None) -> Tuple[str, str]:
+    """(start, end) ISO dates of the recent-releases window, end = today."""
+    t = today or date.today()
+    return (t - timedelta(days=config.RECENT_RELEASE_DAYS)).isoformat(), t.isoformat()
+
+
+def in_window(d: Optional[str], start: str, end: str) -> bool:
+    return bool(d) and start <= d[:10] <= end
+
+
+def prefilter_recent(candidates: List[Dict], start: str, end: str) -> List[Dict]:
+    """Cheap pre-details filter: movies need a release date in the window. TV
+    is kept — whether a returning show has a NEW season in the window is only
+    known after details(), so TV is filtered post-details instead."""
+    return [c for c in candidates
+            if c["media_type"] == "tv" or in_window(c.get("release_date"), start, end)]
 
 
 def drop_known(candidates: List[Dict], known: Set[Tuple[int, str]]) -> List[Dict]:
@@ -146,7 +164,7 @@ def select_pool(candidates: List[Dict], cap: int, movie_max_fraction: float) -> 
     return chosen_tv + chosen_mv
 
 
-def _discover_cluster(tmdb: TMDBClient, cluster: Dict, date_gte: str) -> List[Dict]:
+def _discover_cluster(tmdb: TMDBClient, cluster: Dict, start: str, end: str) -> List[Dict]:
     out: List[Dict] = []
     for spec in cluster["discover"]:
         keyword_ids = [
@@ -159,25 +177,27 @@ def _discover_cluster(tmdb: TMDBClient, cluster: Dict, date_gte: str) -> List[Di
                 with_genres=spec["with_genres"],
                 keyword_ids=keyword_ids,
                 vote_floor=spec["vote_floor"],
-                date_gte=date_gte,
+                date_gte=start,
+                date_lte=end,
                 page=page,
                 with_networks=spec.get("with_networks", ""),
             )
             for r in results:
                 r["source_bucket"] = cluster["name"]
             out.extend(results)
+            if len(results) < 20:   # last page — a 3-month window runs out fast
+                break
 
-        # Popularity-sorted discover rarely surfaces brand-new releases (they
-        # haven't accumulated votes yet), which starves the dashboard's
-        # "Recently Released" section. A small newest-first pass with no vote
-        # floor fixes that.
+        # Popularity-sorted discover under-ranks brand-new releases (no votes
+        # yet). A newest-first pass with no vote floor catches them.
         newest_date_field = "first_air_date.desc" if spec["media_type"] == "tv" else "primary_release_date.desc"
         newest = tmdb.discover(
             media_type=spec["media_type"],
             with_genres=spec["with_genres"],
             keyword_ids=keyword_ids,
             vote_floor=0,
-            date_gte=date_gte,
+            date_gte=start,
+            date_lte=end,
             page=1,
             sort_by=newest_date_field,
             with_networks=spec.get("with_networks", ""),
@@ -194,16 +214,25 @@ def generate_pool(
     cap: int = config.POOL_CAP,
     dry_run: bool = False,
 ) -> Tuple[List[Dict], List[str]]:
-    """Build this week's novel candidate list. Unless dry_run, fetches full
-    details (genres/keywords) for each survivor and upserts into titles.
-    Returns (pool, anchor titles used) — anchors go in the runs notes."""
-    date_gte = (date.today() - timedelta(days=config.RECENCY_MONTHS * 30)).isoformat()
+    """Build this week's novel candidates — RECENT RELEASES ONLY (a movie
+    released, or a TV season premiered, within RECENT_RELEASE_DAYS). Unless
+    dry_run, fetches details for survivors, drops anything outside the window,
+    and upserts the rest. Also refreshes recency/popularity for pending titles
+    seen again this run (e.g. a pending show that just dropped a new season).
+    Returns (pool, anchor titles used)."""
+    start, end = recent_window()
     raw: List[Dict] = []
 
     for cluster in config.CLUSTERS:
-        found = _discover_cluster(tmdb, cluster, date_gte)
+        found = _discover_cluster(tmdb, cluster, start, end)
         logger.info("discover %-28s -> %d results", cluster["name"], len(found))
         raw.extend(found)
+
+    for media_type in ("tv", "movie"):
+        for page in range(1, config.TRENDING_PAGES + 1):
+            for r in tmdb.trending(media_type, page):
+                r["source_bucket"] = TRENDING_BUCKET
+                raw.append(r)
 
     anchors = pick_anchors(conn, config.ANCHORS_PER_RUN)
     anchor_titles = [a["title"] for a in anchors]
@@ -219,46 +248,48 @@ def generate_pool(
         logger.info("boosted creator %s -> %d credits", name, len(credited))
         raw.extend(credited)
 
-    # Discover is filtered server-side via with_original_language, but anchor
-    # recommendations aren't — filter everything here (English-only).
-    raw = [r for r in raw
-           if r.get("original_language") in (None, config.ORIGINAL_LANGUAGE)]
+    # Discover is filtered server-side via with_original_language; trending,
+    # anchors and credits aren't — filter everything here (English-only).
+    raw = dedupe_pool([r for r in raw
+                       if r.get("original_language") in (None, config.ORIGINAL_LANGUAGE)])
 
-    pool = dedupe_pool(raw)
-    known = db.known_keys(conn)
-    pool = drop_known(pool, known)
+    pool = drop_known(raw, db.known_keys(conn))
     novel = len(pool)
+    pool = prefilter_recent(pool, start, end)
     pool = drop_blocklisted(pool, db.blocklist_terms(conn))
-    after_block = len(pool)
+    after_filters = len(pool)
     pool = select_pool(pool, cap, config.MOVIE_MAX_FRACTION)
     n_movies = sum(1 for c in pool if c["media_type"] == "movie")
-    logger.info("pool: %d raw (en-only) -> %d novel -> %d after blocklist -> "
-                "capped at %d (%d tv, %d movie)",
-                len(raw), novel, after_block, len(pool), len(pool) - n_movies, n_movies)
+    logger.info("pool (window %s..%s): %d raw (en-only) -> %d novel -> %d recent+unblocked "
+                "-> capped at %d (%d tv, %d movie)",
+                start, end, len(raw), novel, after_filters, len(pool),
+                len(pool) - n_movies, n_movies)
 
     if dry_run:
         return pool, anchor_titles
 
+    # Refresh recency + buzz for pending/watchlist titles that showed up again.
+    active = {(r["tmdb_id"], r["media_type"]) for r in conn.execute(
+        "SELECT tmdb_id, media_type FROM title_status WHERE status IN ('pending','watchlist')")}
+    refreshed = 0
+    for c in raw:
+        if (c["tmdb_id"], c["media_type"]) in active:
+            db.upsert_title(conn, detail_to_title_row(tmdb.details(c["media_type"], c["tmdb_id"])))
+            refreshed += 1
+
     enriched: List[Dict] = []
+    too_old = 0
     for c in pool:
         detail = tmdb.details(c["media_type"], c["tmdb_id"])
+        if not in_window(detail["recent_date"], start, end):
+            too_old += 1      # e.g. a returning show whose latest season is old
+            continue
         detail["source_bucket"] = c.get("source_bucket", ANCHOR_BUCKET)
-        db.upsert_title(conn, {
-            "tmdb_id": detail["tmdb_id"],
-            "media_type": detail["media_type"],
-            "title": detail["title"],
-            "year": detail["year"],
-            "genres": json.dumps(detail["genre_names"]),
-            "keywords": json.dumps(detail["keyword_names"]),
-            "poster_path": detail["poster_path"],
-            "overview": detail["overview"],
-            "tmdb_rating": detail["tmdb_rating"],
-            "release_date": detail["release_date"],
-            "trailer_url": detail["trailer_url"],
-            "original_language": detail["original_language"],
-        })
+        db.upsert_title(conn, detail_to_title_row(detail))
         enriched.append(detail)
     conn.commit()
+    logger.info("details: %d in window, %d outside window dropped, %d pending refreshed",
+                len(enriched), too_old, refreshed)
     return enriched, anchor_titles
 
 

@@ -131,7 +131,7 @@ def main() -> int:
     render.render_dashboard(result)
 
     # 6. Run log. new_count/carryover_count describe THIS run's scoring
-    #    activity, not the dashboard's recent/recommendations split.
+    #    activity, not the dashboard's recent/older split.
     run_id = db.insert_run(
         conn,
         ran_at=run_started_at,
@@ -145,10 +145,10 @@ def main() -> int:
     summary = result["summary"]
     logger.info(
         "run %d complete: %d newly scored above threshold, %d pending before "
-        "this run | dashboard: %d recent, %d recommendations, %d watchlist | "
+        "this run | dashboard: %d new releases, %d older gems, %d watchlist | "
         "tmdb=%d claude=%d | dashboard: %s",
         run_id, above, pending_before, summary["recent_count"],
-        summary["recommendations_count"], summary["watchlist_count"],
+        summary["older_count"], summary["watchlist_count"],
         tmdb.call_count, claude_calls, config.DASHBOARD_PATH,
     )
     return 0

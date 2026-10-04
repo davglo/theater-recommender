@@ -11,7 +11,6 @@ below MIN_CONFIDENCE is flagged for manual review (or prompted in
 """
 import argparse
 import difflib
-import json
 import logging
 import re
 import sys
@@ -19,7 +18,7 @@ from typing import Dict, List, Optional
 
 import config
 import db
-from tmdb_client import TMDBClient
+from tmdb_client import TMDBClient, detail_to_title_row
 
 logger = logging.getLogger("seed_bootstrap")
 
@@ -122,20 +121,7 @@ def prompt_choice(seed: Dict, candidates: List[Dict]) -> Optional[Dict]:
 
 def insert_seed(conn, client: TMDBClient, match: Dict) -> None:
     detail = client.details(match["media_type"], match["tmdb_id"])
-    db.upsert_title(conn, {
-        "tmdb_id": detail["tmdb_id"],
-        "media_type": detail["media_type"],
-        "title": detail["title"],
-        "year": detail["year"],
-        "genres": json.dumps(detail["genre_names"]),
-        "keywords": json.dumps(detail["keyword_names"]),
-        "poster_path": detail["poster_path"],
-        "overview": detail["overview"],
-        "tmdb_rating": detail["tmdb_rating"],
-        "release_date": detail["release_date"],
-        "trailer_url": detail["trailer_url"],
-        "original_language": detail["original_language"],
-    })
+    db.upsert_title(conn, detail_to_title_row(detail))
     db.set_status(conn, detail["tmdb_id"], detail["media_type"],
                   status="seen", source="seed", decided=True)
 

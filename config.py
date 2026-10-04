@@ -33,11 +33,12 @@ SCORER_CHUNK_SIZE = 20          # candidates per scoring call
 POOL_CAP = 200                  # max novel titles per weekly run
 SCORE_THRESHOLD = 40            # below this: never rendered, never re-scored
 REDERIVE_INTERVAL = 20          # manual decisions between profile re-derivations
-RECENCY_MONTHS = 240            # discover release-date window — era-agnostic per Dave
-                                # (2026-07): best available from any year, not just new
-RECENT_RELEASE_DAYS = 183       # "Recently Released" section window (~6 months);
-                                # soft cut — older titles fall to Recommendations,
-                                # nothing is dropped
+# Recent-releases-only board (2026-10-04): sourcing, filtering and the main
+# section all key off this window. A TV show counts if a season PREMIERED in it.
+RECENT_RELEASE_DAYS = 92        # ~3 months
+OLDER_GEMS_CAP = 10             # older high-fit pending recs shown below the new releases
+BUZZ_MAX = 12                   # max rank bonus for trending, relative to lane peers
+TRENDING_PAGES = 2              # pages of TMDB weekly trending per media type
 ORIGINAL_LANGUAGE = "en"        # English-only: filters discover + anchor recommendations
 ANCHORS_PER_RUN = 12            # seen/watchlist titles used for recommendation pulls
 DISCOVER_PAGES = 5              # pages per discover query — deeper reach for novel
@@ -91,7 +92,8 @@ PREMIUM_NETWORKS = "|".join(str(n) for n in (
 
 # Discover queries per cluster. Keyword strings are resolved to TMDB keyword
 # ids at runtime (never hardcode ids). Empty keywords = genre-only discover.
-# Docs get a low vote floor since they get fewer votes than scripted content.
+# Vote floors are low on purpose: titles from the last ~3 months haven't had
+# time to collect votes (quality comes from the network filter + the scorer).
 CLUSTERS: List[Dict] = [
     {
         "name": CLUSTER_TRUE_CRIME,
@@ -99,11 +101,11 @@ CLUSTERS: List[Dict] = [
             {"media_type": "tv", "with_genres": "99",
              "keywords": ["true crime", "serial killer", "murder", "missing person",
                           "manhunt", "kidnapping", "cold case", "mafia",
-                          "drug cartel", "organized crime"], "vote_floor": 8},
+                          "drug cartel", "organized crime"], "vote_floor": 2},
             {"media_type": "movie", "with_genres": "99",
              "keywords": ["true crime", "serial killer", "murder", "missing person",
                           "manhunt", "kidnapping", "cold case", "mafia",
-                          "drug cartel", "organized crime"], "vote_floor": 8},
+                          "drug cartel", "organized crime"], "vote_floor": 2},
         ],
     },
     {
@@ -112,11 +114,11 @@ CLUSTERS: List[Dict] = [
             {"media_type": "tv", "with_genres": "99",
              "keywords": ["sports", "wrestling", "american football", "basketball",
                           "soccer", "ice hockey", "auto racing", "boxing",
-                          "baseball"], "vote_floor": 10},
+                          "baseball"], "vote_floor": 2},
             {"media_type": "movie", "with_genres": "99",
              "keywords": ["sports", "wrestling", "american football", "basketball",
                           "soccer", "ice hockey", "auto racing", "boxing",
-                          "baseball"], "vote_floor": 10},
+                          "baseball"], "vote_floor": 2},
         ],
     },
     {
@@ -127,11 +129,11 @@ CLUSTERS: List[Dict] = [
             {"media_type": "tv", "with_genres": "99",
              "keywords": ["fraud", "con artist", "scam", "ponzi scheme",
                           "financial crisis", "corruption", "cult", "scandal",
-                          "white collar crime"], "vote_floor": 8},
+                          "white collar crime"], "vote_floor": 2},
             {"media_type": "movie", "with_genres": "99",
              "keywords": ["fraud", "con artist", "scam", "ponzi scheme",
                           "financial crisis", "corruption", "cult", "scandal",
-                          "white collar crime"], "vote_floor": 8},
+                          "white collar crime"], "vote_floor": 2},
         ],
     },
     {
@@ -143,11 +145,11 @@ CLUSTERS: List[Dict] = [
         # otherwise fills up with network procedurals (Chicago Fire, Blue
         # Bloods, Castle). IDs verified against TMDB /network/{id}.
         "discover": [
-            {"media_type": "tv", "with_genres": "80", "keywords": [], "vote_floor": 150,
+            {"media_type": "tv", "with_genres": "80", "keywords": [], "vote_floor": 5,
              "with_networks": PREMIUM_NETWORKS},
-            {"media_type": "tv", "with_genres": "18", "keywords": [], "vote_floor": 300,
+            {"media_type": "tv", "with_genres": "18", "keywords": [], "vote_floor": 5,
              "with_networks": PREMIUM_NETWORKS},
-            {"media_type": "movie", "with_genres": "80", "keywords": [], "vote_floor": 500},
+            {"media_type": "movie", "with_genres": "80", "keywords": [], "vote_floor": 20},
         ],
     },
 ]

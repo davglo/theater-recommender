@@ -68,8 +68,8 @@ def main() -> int:
     result = digest_mod.build_digest(conn, config.SCORE_THRESHOLD)
     render.render_dashboard(result)
     s = result["summary"]
-    logger.info("dashboard: %d recent, %d recommendations, %d watchlist",
-                s["recent_count"], s["recommendations_count"], s["watchlist_count"])
+    logger.info("dashboard: %d new releases, %d older gems, %d watchlist",
+                s["recent_count"], s["older_count"], s["watchlist_count"])
     return 0
 
 

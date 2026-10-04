@@ -26,6 +26,9 @@ CREATE TABLE IF NOT EXISTS titles (
     release_date TEXT,            -- YYYY-MM-DD, TMDB release_date/first_air_date
     trailer_url  TEXT,            -- YouTube URL, nullable
     original_language TEXT,       -- ISO 639-1, e.g. 'en'
+    popularity   REAL,            -- TMDB popularity at last fetch (buzz signal)
+    recent_date  TEXT,            -- last 'release': movie release / TV latest season premiere
+    latest_season INTEGER,        -- TV: season that recent_date belongs to
     added_at     TEXT NOT NULL,   -- ISO timestamp
     PRIMARY KEY (tmdb_id, media_type)
 );
@@ -101,7 +104,8 @@ def now_iso() -> str:
 # on an existing table, so new columns need an explicit ALTER TABLE migration.
 _ADDED_COLUMNS = {
     "titles": {"release_date": "TEXT", "trailer_url": "TEXT",
-               "original_language": "TEXT"},
+               "original_language": "TEXT", "popularity": "REAL",
+               "recent_date": "TEXT", "latest_season": "INTEGER"},
     "title_status": {"rating": "INTEGER"},
 }
 
@@ -135,16 +139,19 @@ def upsert_title(conn: sqlite3.Connection, t: Dict) -> None:
         """INSERT INTO titles
                (tmdb_id, media_type, title, year, genres, keywords,
                 poster_path, overview, tmdb_rating, release_date, trailer_url,
-                original_language, added_at)
+                original_language, popularity, recent_date, latest_season, added_at)
            VALUES (:tmdb_id, :media_type, :title, :year, :genres, :keywords,
                    :poster_path, :overview, :tmdb_rating, :release_date, :trailer_url,
-                   :original_language, :added_at)
+                   :original_language, :popularity, :recent_date, :latest_season,
+                   :added_at)
            ON CONFLICT (tmdb_id, media_type) DO UPDATE SET
                title=excluded.title, year=excluded.year, genres=excluded.genres,
                keywords=excluded.keywords, poster_path=excluded.poster_path,
                overview=excluded.overview, tmdb_rating=excluded.tmdb_rating,
                release_date=excluded.release_date, trailer_url=excluded.trailer_url,
-               original_language=excluded.original_language""",
+               original_language=excluded.original_language,
+               popularity=excluded.popularity, recent_date=excluded.recent_date,
+               latest_season=excluded.latest_season""",
         {
             "tmdb_id": t["tmdb_id"], "media_type": t["media_type"],
             "title": t["title"], "year": t.get("year"),
@@ -152,7 +159,9 @@ def upsert_title(conn: sqlite3.Connection, t: Dict) -> None:
             "poster_path": t.get("poster_path"), "overview": t.get("overview"),
             "tmdb_rating": t.get("tmdb_rating"), "release_date": t.get("release_date"),
             "trailer_url": t.get("trailer_url"),
-            "original_language": t.get("original_language"), "added_at": now_iso(),
+            "original_language": t.get("original_language"),
+            "popularity": t.get("popularity"), "recent_date": t.get("recent_date"),
+            "latest_season": t.get("latest_season"), "added_at": now_iso(),
         },
     )
 

@@ -9,7 +9,6 @@ skip anything already in the pipeline (has a title_status row). English only.
     python3 rate_history_seed.py             # insert prompts
 """
 import argparse
-import json
 import logging
 import sys
 from typing import Dict, List, Optional
@@ -17,7 +16,7 @@ from typing import Dict, List, Optional
 import config
 import db
 from seed_bootstrap import find_candidates, MIN_CONFIDENCE
-from tmdb_client import TMDBClient
+from tmdb_client import TMDBClient, detail_to_title_row
 
 logger = logging.getLogger("rate_history_seed")
 
@@ -185,16 +184,7 @@ def main() -> int:
             print(f"  [dry-run] {line}")
             added += 1
             continue
-        db.upsert_title(conn, {
-            "tmdb_id": detail["tmdb_id"], "media_type": detail["media_type"],
-            "title": detail["title"], "year": detail["year"],
-            "genres": json.dumps(detail["genre_names"]),
-            "keywords": json.dumps(detail["keyword_names"]),
-            "poster_path": detail["poster_path"], "overview": detail["overview"],
-            "tmdb_rating": detail["tmdb_rating"], "release_date": detail["release_date"],
-            "trailer_url": detail["trailer_url"],
-            "original_language": detail["original_language"],
-        })
+        db.upsert_title(conn, detail_to_title_row(detail))
         db.add_rate_prompt(conn, detail["tmdb_id"], detail["media_type"])
         conn.commit()
         logger.info("added %s", line)

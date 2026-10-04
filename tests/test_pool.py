@@ -6,7 +6,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from candidate_pool import (apply_cap, credits_to_candidates,  # noqa: E402
-                            dedupe_pool, drop_blocklisted, drop_known, select_pool)
+                            dedupe_pool, drop_blocklisted, drop_known, in_window,
+                            prefilter_recent, select_pool)
 from db import text_matches_blocklist  # noqa: E402
 
 
@@ -138,6 +139,28 @@ class TestCreditsToCandidates(unittest.TestCase):
 
     def test_empty_payload(self):
         self.assertEqual(credits_to_candidates({}, "Prestige"), [])
+
+
+class TestRecentWindow(unittest.TestCase):
+    START, END = "2026-07-01", "2026-10-01"
+
+    def test_in_window_edges(self):
+        self.assertTrue(in_window("2026-07-01", self.START, self.END))
+        self.assertTrue(in_window("2026-10-01", self.START, self.END))
+        self.assertFalse(in_window("2026-06-30", self.START, self.END))
+        self.assertFalse(in_window("2026-10-02", self.START, self.END))  # future = not out
+        self.assertFalse(in_window(None, self.START, self.END))
+
+    def test_prefilter_keeps_tv_drops_old_movies(self):
+        pool = [
+            {"tmdb_id": 1, "media_type": "movie", "release_date": "2026-08-15"},
+            {"tmdb_id": 2, "media_type": "movie", "release_date": "2001-01-01"},
+            {"tmdb_id": 3, "media_type": "movie", "release_date": None},
+            # Old premiere, but may have a new season — decided after details().
+            {"tmdb_id": 4, "media_type": "tv", "release_date": "2013-09-12"},
+        ]
+        out = prefilter_recent(pool, self.START, self.END)
+        self.assertEqual([c["tmdb_id"] for c in out], [1, 4])
 
 
 if __name__ == "__main__":
