@@ -119,7 +119,7 @@ def build_digest(conn: sqlite3.Connection, threshold: int,
     scoring = config.FIT_SCORING if fit_scoring is None else fit_scoring
     rows = conn.execute(
         """SELECT t.tmdb_id, t.media_type, t.title, t.year, t.genres,
-                  t.poster_path, t.overview, t.tmdb_rating, t.trailer_url,
+                  t.poster_path, t.overview, t.tmdb_rating, t.tmdb_votes, t.trailer_url,
                   COALESCE(t.recent_date, t.release_date) AS recent_date,
                   t.latest_season, t.popularity, ts.status,
                   COALESCE(s.cluster, t.source_lane) AS cluster,
@@ -146,6 +146,7 @@ def build_digest(conn: sqlite3.Connection, threshold: int,
             "poster_path": r["poster_path"],
             "overview": r["overview"] or "",
             "tmdb_rating": r["tmdb_rating"],
+            "tmdb_votes": r["tmdb_votes"],
             "trailer_url": r["trailer_url"],
             "cluster": r["cluster"] or "Unclustered",
             # Hidden (None / "") with scoring off, even for titles scored earlier.
@@ -198,7 +199,7 @@ def _rate_history_items(conn: sqlite3.Connection) -> List[Dict]:
     handled). Sorted by TMDB rating desc as an acclaim proxy."""
     rows = conn.execute(
         """SELECT t.tmdb_id, t.media_type, t.title, t.year, t.genres,
-                  t.poster_path, t.overview, t.tmdb_rating, t.release_date,
+                  t.poster_path, t.overview, t.tmdb_rating, t.tmdb_votes, t.release_date,
                   t.trailer_url
            FROM rate_prompts rp
            JOIN titles t ON t.tmdb_id = rp.tmdb_id AND t.media_type = rp.media_type
@@ -218,6 +219,7 @@ def _rate_history_items(conn: sqlite3.Connection) -> List[Dict]:
             "poster_path": r["poster_path"],
             "overview": r["overview"] or "",
             "tmdb_rating": r["tmdb_rating"],
+            "tmdb_votes": r["tmdb_votes"],
             "trailer_url": r["trailer_url"],
         })
     return items

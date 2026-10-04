@@ -78,7 +78,7 @@ TEMPLATE = """<!DOCTYPE html>
   .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
   .rating { color: var(--muted); font-size: 12px; }
   .fit { font-weight: 700; font-size: 13px; }
-  .trailer { font-size: 11.5px; color: var(--accent); text-decoration: none;
+  .trailer { font-size: 11.5px; color: var(--accent); text-decoration: none; white-space: nowrap;
              border: 1px solid #2c3947; border-radius: 6px; padding: 2px 7px; }
   .trailer:hover { border-color: var(--accent); }
   .btns { display: flex; gap: 6px; }
@@ -140,6 +140,14 @@ function esc(s) {
     c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
+// "TMDB 8.8 · 12 votes" — the vote count shows how solid the rating is
+// (brand-new titles are often rated by only a handful of people).
+function tmdbRating(item) {
+  const v = item.tmdb_votes || 0;
+  if (!item.tmdb_rating || !v) return "TMDB · not rated yet";
+  return `TMDB ${Number(item.tmdb_rating).toFixed(1)} · ${v.toLocaleString()} vote${v === 1 ? "" : "s"}`;
+}
+
 function truncate(s, max) {
   s = s || "";
   return s.length > max ? s.slice(0, max).trimEnd() + "…" : s;
@@ -183,7 +191,7 @@ function card(item, section) {
       ${deal}
       <div class="foot">
         <span>${hasFit ? `<span class="fit" style="color:${col}">${item.fit_score}</span>` : ""}
-          <span class="rating">&nbsp;TMDB ${item.tmdb_rating ? Number(item.tmdb_rating).toFixed(1) : "–"}</span>
+          <span class="rating">&nbsp;${tmdbRating(item)}</span>
           ${trailer ? " &nbsp;" + trailer : ""}</span>
         <span class="btns">${buttons}</span>
       </div>
@@ -271,7 +279,7 @@ function historyCard(item) {
         <span class="badge">${item.media_type}</span></div>
       <div class="overview">${esc(truncate(item.overview, 260))}</div>
       <div class="foot">
-        <span class="rating">TMDB ${item.tmdb_rating ? Number(item.tmdb_rating).toFixed(1) : "–"}
+        <span class="rating">${tmdbRating(item)}
           &nbsp;<a class="trailer" href="${esc(trailerHref)}" target="_blank" rel="noopener">&#9654; Trailer</a></span>
       </div>
       <div class="rate-prompt">

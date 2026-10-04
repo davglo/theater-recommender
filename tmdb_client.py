@@ -179,6 +179,7 @@ def detail_to_title_row(d: Dict) -> Dict:
         "year": d["year"], "genres": json.dumps(d["genre_names"]),
         "keywords": json.dumps(d["keyword_names"]), "poster_path": d["poster_path"],
         "overview": d["overview"], "tmdb_rating": d["tmdb_rating"],
+        "tmdb_votes": d["vote_count"],
         "release_date": d["release_date"], "trailer_url": d["trailer_url"],
         "original_language": d["original_language"], "popularity": d["popularity"],
         "recent_date": d["recent_date"], "latest_season": d["latest_season"],

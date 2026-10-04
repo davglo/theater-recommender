@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS titles (
     poster_path  TEXT,
     overview     TEXT,
     tmdb_rating  REAL,
+    tmdb_votes   INTEGER,         -- how many TMDB users rated it (context for tmdb_rating)
     release_date TEXT,            -- YYYY-MM-DD, TMDB release_date/first_air_date
     trailer_url  TEXT,            -- YouTube URL, nullable
     original_language TEXT,       -- ISO 639-1, e.g. 'en'
@@ -107,7 +108,7 @@ _ADDED_COLUMNS = {
     "titles": {"release_date": "TEXT", "trailer_url": "TEXT",
                "original_language": "TEXT", "popularity": "REAL",
                "recent_date": "TEXT", "latest_season": "INTEGER",
-               "source_lane": "TEXT"},
+               "source_lane": "TEXT", "tmdb_votes": "INTEGER"},
     "title_status": {"rating": "INTEGER"},
 }
 
@@ -142,11 +143,11 @@ def upsert_title(conn: sqlite3.Connection, t: Dict) -> None:
                (tmdb_id, media_type, title, year, genres, keywords,
                 poster_path, overview, tmdb_rating, release_date, trailer_url,
                 original_language, popularity, recent_date, latest_season,
-                source_lane, added_at)
+                source_lane, tmdb_votes, added_at)
            VALUES (:tmdb_id, :media_type, :title, :year, :genres, :keywords,
                    :poster_path, :overview, :tmdb_rating, :release_date, :trailer_url,
                    :original_language, :popularity, :recent_date, :latest_season,
-                   :source_lane, :added_at)
+                   :source_lane, :tmdb_votes, :added_at)
            ON CONFLICT (tmdb_id, media_type) DO UPDATE SET
                title=excluded.title, year=excluded.year, genres=excluded.genres,
                keywords=excluded.keywords, poster_path=excluded.poster_path,
@@ -155,7 +156,8 @@ def upsert_title(conn: sqlite3.Connection, t: Dict) -> None:
                original_language=excluded.original_language,
                popularity=excluded.popularity, recent_date=excluded.recent_date,
                latest_season=excluded.latest_season,
-               source_lane=COALESCE(excluded.source_lane, titles.source_lane)""",
+               source_lane=COALESCE(excluded.source_lane, titles.source_lane),
+               tmdb_votes=excluded.tmdb_votes""",
         {
             "tmdb_id": t["tmdb_id"], "media_type": t["media_type"],
             "title": t["title"], "year": t.get("year"),
@@ -166,7 +168,8 @@ def upsert_title(conn: sqlite3.Connection, t: Dict) -> None:
             "original_language": t.get("original_language"),
             "popularity": t.get("popularity"), "recent_date": t.get("recent_date"),
             "latest_season": t.get("latest_season"),
-            "source_lane": t.get("source_lane"), "added_at": now_iso(),
+            "source_lane": t.get("source_lane"), "tmdb_votes": t.get("tmdb_votes"),
+            "added_at": now_iso(),
         },
     )
 

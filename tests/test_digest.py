@@ -250,6 +250,13 @@ class TestScoringOff(unittest.TestCase):
         self.assertEqual(classify("pending", 5, 40, OLD_DATE, require_fit=False), "older")
         self.assertIsNone(classify("not_interested", None, 40, RECENT_DATE, require_fit=False))
 
+    def test_vote_count_reaches_the_card(self):
+        db.upsert_title(self.conn, {"tmdb_id": 7, "media_type": "tv", "title": "Rated", "year": 2026,
+                                    "recent_date": days_ago(3), "tmdb_rating": 8.8, "tmdb_votes": 12})
+        db.set_status(self.conn, 7, "tv", "pending", "weekly_run", decided=False)
+        item = build_digest(self.conn, threshold=40, fit_scoring=False)["recent"][0]
+        self.assertEqual((item["tmdb_rating"], item["tmdb_votes"]), (8.8, 12))
+
     def test_known_keys_can_ignore_scores(self):
         self._pending(1, days_ago(5))
         db.upsert_title(self.conn, {"tmdb_id": 9, "media_type": "tv", "title": "Scored only", "year": 2026})
