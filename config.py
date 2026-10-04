@@ -98,6 +98,12 @@ BOOSTED_PEOPLE: Dict[int, str] = {956: "Guy Ritchie"}
 PREMIUM_NETWORKS = "|".join(str(n) for n in (
     49, 213, 88, 174, 67, 318, 2552, 1024, 453, 4330, 3186, 1063, 3353, 4, 332, 26))
 
+# "Junk drama" genres excluded from the scripted lane (Dave, 2026-10-04) —
+# verified against TMDB /genre/{tv,movie}/list. Doc lanes are NOT filtered:
+# TMDB tags some true-crime docuseries "Reality".
+JUNK_TV_GENRES = "10751,10762,10763,10764,10766,10767"   # Family, Kids, News, Reality, Soap, Talk
+JUNK_MOVIE_GENRES = "10749,10751,10770"                   # Romance, Family, TV Movie (Lifetime-style)
+
 # Discover queries per cluster. Keyword strings are resolved to TMDB keyword
 # ids at runtime (never hardcode ids). Empty keywords = genre-only discover.
 # Vote floors are low on purpose: titles from the last ~3 months haven't had
@@ -154,10 +160,11 @@ CLUSTERS: List[Dict] = [
         # Bloods, Castle). IDs verified against TMDB /network/{id}.
         "discover": [
             {"media_type": "tv", "with_genres": "80", "keywords": [], "vote_floor": 5,
-             "with_networks": PREMIUM_NETWORKS},
+             "with_networks": PREMIUM_NETWORKS, "without_genres": JUNK_TV_GENRES},
             {"media_type": "tv", "with_genres": "18", "keywords": [], "vote_floor": 5,
-             "with_networks": PREMIUM_NETWORKS},
-            {"media_type": "movie", "with_genres": "80", "keywords": [], "vote_floor": 20},
+             "with_networks": PREMIUM_NETWORKS, "without_genres": JUNK_TV_GENRES},
+            {"media_type": "movie", "with_genres": "80", "keywords": [], "vote_floor": 20,
+             "without_genres": JUNK_MOVIE_GENRES},
         ],
     },
 ]

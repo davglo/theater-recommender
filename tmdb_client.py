@@ -99,6 +99,7 @@ class TMDBClient:
         page: int = 1,
         sort_by: str = "popularity.desc",
         with_networks: str = "",
+        without_genres: str = "",
     ) -> List[Dict]:
         """TV filters on EPISODE air dates (air_date.*), so returning shows with a
         new season in the window are found, not just brand-new series. Movies
@@ -118,6 +119,8 @@ class TMDBClient:
             params["with_keywords"] = "|".join(str(k) for k in keyword_ids)  # OR
         if with_networks:
             params["with_networks"] = with_networks  # TV only; pipe-separated = OR
+        if without_genres:
+            params["without_genres"] = without_genres  # excludes a title having ANY of these
         data = self._get(f"/discover/{media_type}", params)
         return [normalize_result(r, media_type) for r in data.get("results", [])]
 

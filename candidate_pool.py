@@ -181,6 +181,7 @@ def _discover_cluster(tmdb: TMDBClient, cluster: Dict, start: str, end: str) -> 
                 date_lte=end,
                 page=page,
                 with_networks=spec.get("with_networks", ""),
+            without_genres=spec.get("without_genres", ""),
             )
             for r in results:
                 r["source_bucket"] = cluster["name"]
@@ -201,6 +202,7 @@ def _discover_cluster(tmdb: TMDBClient, cluster: Dict, start: str, end: str) -> 
             page=1,
             sort_by=newest_date_field,
             with_networks=spec.get("with_networks", ""),
+            without_genres=spec.get("without_genres", ""),
         )
         for r in newest:
             r["source_bucket"] = cluster["name"]
