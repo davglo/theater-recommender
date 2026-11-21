@@ -160,6 +160,7 @@ class TMDBClient:
         us = ((data.get("watch/providers") or {}).get("results") or {}).get("US") or {}
         out["platforms"] = pick_platforms(
             us, [n.get("name", "") for n in data.get("networks") or [] if n.get("name")])
+        out["network_ids"] = [n["id"] for n in data.get("networks") or [] if n.get("id")]
         out["latest_season"], out["recent_date"] = None, out["release_date"]
         if media_type == "tv":
             season = latest_aired_season(data.get("seasons") or [], date.today().isoformat())
@@ -220,6 +221,7 @@ def detail_to_title_row(d: Dict) -> Dict:
         "overview": d["overview"], "tmdb_rating": d["tmdb_rating"],
         "tmdb_votes": d["vote_count"],
         "platforms": json.dumps(d.get("platforms") or []),
+        "networks": json.dumps(d.get("network_ids") or []),
         "release_date": d["release_date"], "trailer_url": d["trailer_url"],
         "original_language": d["original_language"], "popularity": d["popularity"],
         "recent_date": d["recent_date"], "latest_season": d["latest_season"],

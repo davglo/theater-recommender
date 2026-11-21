@@ -62,6 +62,11 @@ QUALITY_MIN_VOTES = 30
 OTHER_MIN_RATING = 7.0
 OTHER_MIN_VOTES_TV = 50
 OTHER_MIN_VOTES_MOVIE = 150
+# Network procedurals (Dave, 2026-11-21: "not interested in shows like Chicago
+# Fire or NCIS"): scripted TV on the big US broadcast networks is hidden.
+# Documentaries (true crime on NBC/ABC) are exempt. IDs: ABC 2, NBC 6, CBS 16,
+# FOX 19, The CW 71.
+EXCLUDED_BROADCAST_NETWORKS = (2, 6, 16, 19, 71)
 OTHER_MAX_SEASON = 2             # catch-all lane: new series / early seasons only
 
 # --- Write-back server ------------------------------------------------------

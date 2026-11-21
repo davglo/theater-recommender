@@ -12,6 +12,7 @@ from datetime import date, timedelta
 from typing import Dict, List, Optional, Set, Tuple
 
 import config
+from digest import is_network_procedural
 import db
 from tmdb_client import TMDBClient, detail_to_title_row, normalize_result
 
@@ -294,6 +295,9 @@ def generate_pool(
         if not in_window(detail["recent_date"], start, end):
             too_old += 1      # e.g. a returning show whose latest season is old
             continue
+        if is_network_procedural(detail["media_type"], detail["genre_names"],
+                                 detail.get("network_ids") or []):
+            continue   # hidden anyway; don't spend a board slot on it
         detail["source_bucket"] = c.get("source_bucket", ANCHOR_BUCKET)
         db.upsert_title(conn, detail_to_title_row(detail))
         enriched.append(detail)

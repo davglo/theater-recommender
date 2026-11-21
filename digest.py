@@ -76,6 +76,13 @@ def passes_quality(rating: Optional[float], votes: Optional[int],
     return (rating or 0) >= config.QUALITY_MIN_RATING
 
 
+def is_network_procedural(media_type: str, genres: List[str], network_ids: List[int]) -> bool:
+    """Scripted TV on a broadcast network (NCIS, Chicago Fire, S.W.A.T.…).
+    Documentaries are exempt (Dateline-style true crime stays)."""
+    return (media_type == "tv" and "Documentary" not in genres
+            and any(n in config.EXCLUDED_BROADCAST_NETWORKS for n in network_ids))
+
+
 def classify(
     status: Optional[str],
     fit_score: Optional[int],
@@ -131,7 +138,7 @@ def build_digest(conn: sqlite3.Connection, threshold: int,
     scoring = config.FIT_SCORING if fit_scoring is None else fit_scoring
     rows = conn.execute(
         """SELECT t.tmdb_id, t.media_type, t.title, t.year, t.genres,
-                  t.poster_path, t.overview, t.tmdb_rating, t.tmdb_votes, t.platforms, t.imdb_rating, t.imdb_votes, t.rt_score, t.trailer_url,
+                  t.poster_path, t.overview, t.tmdb_rating, t.tmdb_votes, t.platforms, t.networks, t.imdb_rating, t.imdb_votes, t.rt_score, t.trailer_url,
                   COALESCE(t.recent_date, t.release_date) AS recent_date,
                   t.latest_season, t.popularity, ts.status,
                   COALESCE(s.cluster, t.source_lane) AS cluster,
@@ -150,6 +157,10 @@ def build_digest(conn: sqlite3.Connection, threshold: int,
             continue
         if section == "recent" and not passes_quality(r["tmdb_rating"], r["tmdb_votes"], r["cluster"]):
             continue   # hidden, not deleted — lowering the bar brings it back
+        if is_network_procedural(r["media_type"],
+                                 json.loads(r["genres"]) if r["genres"] else [],
+                                 json.loads(r["networks"]) if r["networks"] else []):
+            continue
         if (r["cluster"] == config.CLUSTER_OTHER and r["media_type"] == "tv"
                 and (r["latest_season"] or 1) > config.OTHER_MAX_SEASON):
             continue   # long-running network procedurals (NCIS, Chicago Fire…)

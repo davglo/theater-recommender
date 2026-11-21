@@ -268,6 +268,15 @@ class TestScoringOff(unittest.TestCase):
         self.assertIn((1, "tv"), db.known_keys(self.conn, include_scored=False))
 
 
+class TestNetworkProcedural(unittest.TestCase):
+    def test_broadcast_scripted_hidden_docs_kept(self):
+        from digest import is_network_procedural
+        self.assertTrue(is_network_procedural("tv", ["Crime", "Drama"], [16]))      # NCIS / CBS
+        self.assertFalse(is_network_procedural("tv", ["Documentary"], [6]))         # Dateline / NBC
+        self.assertFalse(is_network_procedural("tv", ["Drama"], [49]))              # HBO
+        self.assertFalse(is_network_procedural("movie", ["Crime"], []))
+
+
 class TestQualityBar(unittest.TestCase):
     def test_bar(self):
         from digest import passes_quality

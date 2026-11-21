@@ -112,7 +112,7 @@ _ADDED_COLUMNS = {
                "source_lane": "TEXT", "tmdb_votes": "INTEGER",
                "platforms": "TEXT", "imdb_id": "TEXT", "imdb_rating": "REAL",
                "imdb_votes": "INTEGER", "rt_score": "INTEGER",
-               "critics_checked_at": "TEXT"},
+               "critics_checked_at": "TEXT", "networks": "TEXT"},
     "title_status": {"rating": "INTEGER"},
 }
 
@@ -147,11 +147,11 @@ def upsert_title(conn: sqlite3.Connection, t: Dict) -> None:
                (tmdb_id, media_type, title, year, genres, keywords,
                 poster_path, overview, tmdb_rating, release_date, trailer_url,
                 original_language, popularity, recent_date, latest_season,
-                source_lane, tmdb_votes, platforms, added_at)
+                source_lane, tmdb_votes, platforms, networks, added_at)
            VALUES (:tmdb_id, :media_type, :title, :year, :genres, :keywords,
                    :poster_path, :overview, :tmdb_rating, :release_date, :trailer_url,
                    :original_language, :popularity, :recent_date, :latest_season,
-                   :source_lane, :tmdb_votes, :platforms, :added_at)
+                   :source_lane, :tmdb_votes, :platforms, :networks, :added_at)
            ON CONFLICT (tmdb_id, media_type) DO UPDATE SET
                title=excluded.title, year=excluded.year, genres=excluded.genres,
                keywords=excluded.keywords, poster_path=excluded.poster_path,
@@ -162,7 +162,8 @@ def upsert_title(conn: sqlite3.Connection, t: Dict) -> None:
                latest_season=excluded.latest_season,
                source_lane=COALESCE(excluded.source_lane, titles.source_lane),
                tmdb_votes=excluded.tmdb_votes,
-               platforms=COALESCE(excluded.platforms, titles.platforms)""",
+               platforms=COALESCE(excluded.platforms, titles.platforms),
+               networks=COALESCE(excluded.networks, titles.networks)""",
         {
             "tmdb_id": t["tmdb_id"], "media_type": t["media_type"],
             "title": t["title"], "year": t.get("year"),
@@ -174,7 +175,7 @@ def upsert_title(conn: sqlite3.Connection, t: Dict) -> None:
             "popularity": t.get("popularity"), "recent_date": t.get("recent_date"),
             "latest_season": t.get("latest_season"),
             "source_lane": t.get("source_lane"), "tmdb_votes": t.get("tmdb_votes"),
-            "platforms": t.get("platforms"),
+            "platforms": t.get("platforms"), "networks": t.get("networks"),
             "added_at": now_iso(),
         },
     )
