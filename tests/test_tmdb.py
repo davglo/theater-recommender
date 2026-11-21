@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from tmdb_client import TMDBClient, latest_aired_season, pick_platforms  # noqa: E402
+from tmdb_client import TMDBClient, latest_aired_season, pick_platforms, title_matches, ranked_trailer_urls  # noqa: E402
 
 TODAY = "2026-10-04"
 
@@ -49,6 +49,19 @@ class TestDiscoverParams(unittest.TestCase):
         self.assertEqual((params["air_date.gte"], params["air_date.lte"]), ("2026-07-04", "2026-10-04"))
         movie = self._capture(media_type="movie")["params"]
         self.assertIn("primary_release_date.gte", movie)
+
+
+class TestTrailers(unittest.TestCase):
+    def test_title_match(self):
+        self.assertTrue(title_matches("Monster: The Lizzie Borden Story",
+                                      "MONSTER: The Lizzie Borden Story | Official Trailer"))
+        self.assertFalse(title_matches("Slow Horses", "Severance Season 2 Trailer"))
+
+    def test_latest_season_video_first(self):
+        vids = [{"site": "YouTube", "type": "Trailer", "official": True, "key": "a", "name": "Season 1 Trailer"},
+                {"site": "YouTube", "type": "Trailer", "official": False, "key": "b", "name": "Season 3 Trailer"}]
+        self.assertTrue(ranked_trailer_urls(vids, 3)[0].endswith("=b"))
+        self.assertTrue(ranked_trailer_urls(vids, None)[0].endswith("=a"))
 
 
 class TestPickPlatforms(unittest.TestCase):

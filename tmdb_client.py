@@ -142,6 +142,24 @@ class TMDBClient:
         data = self._get(f"/{media_type}/{tmdb_id}/recommendations", {"page": page})
         return [normalize_result(r, media_type) for r in data.get("results", [])]
 
+    def _first_live_trailer(self, videos: List[Dict], title: str,
+                            season: Optional[int] = None) -> Optional[str]:
+        """Best trailer that still exists AND is about this title: TMDB keeps
+        deleted videos and sometimes attaches another show's. The YouTube video
+        title must contain the show's title. 401 = embedding disabled, so the
+        title can't be read: accepted (watch page works)."""
+        for url in ranked_trailer_urls(videos, season):
+            try:
+                resp = requests.get("https://www.youtube.com/oembed",
+                                    params={"url": url, "format": "json"}, timeout=10)
+            except requests.RequestException:
+                return url      # can't verify: keep the best guess
+            if resp.status_code == 401:
+                return url
+            if resp.status_code == 200 and title_matches(title, resp.json().get("title", "")):
+                return url
+        return None
+
     def details(self, media_type: str, tmdb_id: int) -> Dict:
         """Full details incl. genre names, keywords, and a trailer link, normalized."""
         data = self._get(f"/{media_type}/{tmdb_id}",
@@ -156,7 +174,6 @@ class TMDBClient:
             k.get("name", "") for k in (kw_list or []) if k.get("name")
         ]
         videos = (data.get("videos", {}) or {}).get("results", []) or []
-        out["trailer_url"] = _pick_trailer_url(videos)
         us = ((data.get("watch/providers") or {}).get("results") or {}).get("US") or {}
         out["platforms"] = pick_platforms(
             us, [n.get("name", "") for n in data.get("networks") or [] if n.get("name")])
@@ -167,6 +184,7 @@ class TMDBClient:
             if season:
                 out["latest_season"] = season["season_number"]
                 out["recent_date"] = season["air_date"]
+        out["trailer_url"] = self._first_live_trailer(videos, out["title"], out["latest_season"])
         return out
 
 
@@ -232,21 +250,39 @@ def detail_to_title_row(d: Dict) -> Dict:
     }
 
 
-def _pick_trailer_url(videos: List[Dict]) -> Optional[str]:
-    """Best YouTube trailer link: official Trailer > any Trailer > any Teaser."""
+def _norm(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def title_matches(title: str, video_title: str) -> bool:
+    """True if the YouTube video title mentions the show/movie title."""
+    t = _norm(title)
+    return bool(t) and t in _norm(video_title)
+
+
+def ranked_trailer_urls(videos: List[Dict], season: Optional[int] = None) -> List[str]:
+    """YouTube trailer links, best first: official Trailer > any Trailer >
+    Teaser; for a returning show, the video named for the latest season wins."""
     def score(v: Dict) -> int:
         if v.get("site") != "YouTube":
             return -1
         if v.get("type") == "Trailer":
-            return 2 if v.get("official") else 1
-        if v.get("type") == "Teaser":
-            return 0
-        return -1
+            base = 2 if v.get("official") else 1
+        elif v.get("type") == "Teaser":
+            base = 0
+        else:
+            return -1
+        if season and season > 1 and re.search(rf"season\s*{season}\b", v.get("name", ""), re.I):
+            base += 10
+        return base
 
-    best = max(videos, key=score, default=None)
-    if best is None or score(best) < 0:
-        return None
-    return f"https://www.youtube.com/watch?v={best['key']}"
+    good = sorted((v for v in videos if score(v) >= 0), key=lambda v: -score(v))
+    return [f"https://www.youtube.com/watch?v={v['key']}" for v in good]
+
+
+def _pick_trailer_url(videos: List[Dict]) -> Optional[str]:
+    urls = ranked_trailer_urls(videos)
+    return urls[0] if urls else None
 
 
 def normalize_result(raw: Dict, media_type: str) -> Dict:

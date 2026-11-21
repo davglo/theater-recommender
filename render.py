@@ -196,7 +196,7 @@ function card(item, section) {
   const trailerHref = item.trailer_url ||
     ("https://www.youtube.com/results?search_query=" +
      encodeURIComponent(`${item.title || ""} ${item.year || ""} trailer`.trim()));
-  const trailer = `<a class="trailer" href="${esc(trailerHref)}" target="_blank" rel="noopener">&#9654; Trailer</a>`;
+  const trailer = `<a class="trailer" href="${esc(trailerHref)}" target="_blank" rel="noopener">${item.trailer_url ? "&#9654; Trailer" : "&#128269; Find trailer"}</a>`;
   const buttons = section === "watchlist"
     ? `<button data-s="seen">Seen</button><button data-s="not_interested">Nope</button>`
     : `<button data-s="seen">Seen</button><button data-s="not_interested">Nope</button><button data-s="watchlist">&#9733; Watch</button>`;
@@ -304,7 +304,7 @@ function historyCard(item) {
       <div class="overview">${esc(truncate(item.overview, 260))}</div>
       <div class="foot">
         <span class="rating">${ratings(item)}
-          &nbsp;<a class="trailer" href="${esc(trailerHref)}" target="_blank" rel="noopener">&#9654; Trailer</a></span>
+          &nbsp;<a class="trailer" href="${esc(trailerHref)}" target="_blank" rel="noopener">${item.trailer_url ? "&#9654; Trailer" : "&#128269; Find trailer"}</a></span>
       </div>
       <div class="rate-prompt">
         <span>Seen it?</span>
