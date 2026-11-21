@@ -64,6 +64,18 @@ def recency_label(media_type: str, latest_season: Optional[int], days: Optional[
     return f"{kind} · {ago}" if ago and kind != "Released" else f"{kind} {ago}".strip()
 
 
+def passes_quality(rating: Optional[float], votes: Optional[int],
+                   cluster: Optional[str] = None) -> bool:
+    """Quality bar: judged only once a title has QUALITY_MIN_VOTES votes; below
+    that it's too new to rate and passes. The catch-all lane has no topical
+    filter to lean on, so it must prove itself: real vote count AND a high rating."""
+    if cluster == config.CLUSTER_OTHER:
+        return (votes or 0) >= config.OTHER_MIN_VOTES_TV and (rating or 0) >= config.OTHER_MIN_RATING
+    if not votes or votes < config.QUALITY_MIN_VOTES:
+        return True
+    return (rating or 0) >= config.QUALITY_MIN_RATING
+
+
 def classify(
     status: Optional[str],
     fit_score: Optional[int],
@@ -119,7 +131,7 @@ def build_digest(conn: sqlite3.Connection, threshold: int,
     scoring = config.FIT_SCORING if fit_scoring is None else fit_scoring
     rows = conn.execute(
         """SELECT t.tmdb_id, t.media_type, t.title, t.year, t.genres,
-                  t.poster_path, t.overview, t.tmdb_rating, t.tmdb_votes, t.platforms, t.trailer_url,
+                  t.poster_path, t.overview, t.tmdb_rating, t.tmdb_votes, t.platforms, t.imdb_rating, t.imdb_votes, t.rt_score, t.trailer_url,
                   COALESCE(t.recent_date, t.release_date) AS recent_date,
                   t.latest_season, t.popularity, ts.status,
                   COALESCE(s.cluster, t.source_lane) AS cluster,
@@ -136,6 +148,11 @@ def build_digest(conn: sqlite3.Connection, threshold: int,
                            require_fit=scoring)
         if section is None:
             continue
+        if section == "recent" and not passes_quality(r["tmdb_rating"], r["tmdb_votes"], r["cluster"]):
+            continue   # hidden, not deleted — lowering the bar brings it back
+        if (r["cluster"] == config.CLUSTER_OTHER and r["media_type"] == "tv"
+                and (r["latest_season"] or 1) > config.OTHER_MAX_SEASON):
+            continue   # long-running network procedurals (NCIS, Chicago Fire…)
         days = days_since_release(r["recent_date"])
         sections[section].append({
             "tmdb_id": r["tmdb_id"],
@@ -147,6 +164,8 @@ def build_digest(conn: sqlite3.Connection, threshold: int,
             "overview": r["overview"] or "",
             "tmdb_rating": r["tmdb_rating"],
             "tmdb_votes": r["tmdb_votes"],
+            "imdb_rating": r["imdb_rating"], "imdb_votes": r["imdb_votes"],
+            "rt_score": r["rt_score"],
             "platforms": json.loads(r["platforms"]) if r["platforms"] else [],
             "trailer_url": r["trailer_url"],
             "cluster": r["cluster"] or "Unclustered",
@@ -200,7 +219,7 @@ def _rate_history_items(conn: sqlite3.Connection) -> List[Dict]:
     handled). Sorted by TMDB rating desc as an acclaim proxy."""
     rows = conn.execute(
         """SELECT t.tmdb_id, t.media_type, t.title, t.year, t.genres,
-                  t.poster_path, t.overview, t.tmdb_rating, t.tmdb_votes, t.platforms, t.release_date,
+                  t.poster_path, t.overview, t.tmdb_rating, t.tmdb_votes, t.platforms, t.imdb_rating, t.imdb_votes, t.rt_score, t.release_date,
                   t.trailer_url
            FROM rate_prompts rp
            JOIN titles t ON t.tmdb_id = rp.tmdb_id AND t.media_type = rp.media_type
@@ -221,6 +240,8 @@ def _rate_history_items(conn: sqlite3.Connection) -> List[Dict]:
             "overview": r["overview"] or "",
             "tmdb_rating": r["tmdb_rating"],
             "tmdb_votes": r["tmdb_votes"],
+            "imdb_rating": r["imdb_rating"], "imdb_votes": r["imdb_votes"],
+            "rt_score": r["rt_score"],
             "platforms": json.loads(r["platforms"]) if r["platforms"] else [],
             "trailer_url": r["trailer_url"],
         })

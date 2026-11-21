@@ -181,7 +181,8 @@ def _discover_cluster(tmdb: TMDBClient, cluster: Dict, start: str, end: str) -> 
                 date_lte=end,
                 page=page,
                 with_networks=spec.get("with_networks", ""),
-            without_genres=spec.get("without_genres", ""),
+                without_genres=spec.get("without_genres", ""),
+                min_rating=spec.get("min_rating", 0.0),
             )
             for r in results:
                 r["source_bucket"] = cluster["name"]
@@ -191,6 +192,8 @@ def _discover_cluster(tmdb: TMDBClient, cluster: Dict, start: str, end: str) -> 
 
         # Popularity-sorted discover under-ranks brand-new releases (no votes
         # yet). A newest-first pass with no vote floor catches them.
+        if spec.get("min_rating"):
+            continue   # catch-all lane: the newest-first pass only adds unrated noise
         newest_date_field = "first_air_date.desc" if spec["media_type"] == "tv" else "primary_release_date.desc"
         newest = tmdb.discover(
             media_type=spec["media_type"],
@@ -203,6 +206,7 @@ def _discover_cluster(tmdb: TMDBClient, cluster: Dict, start: str, end: str) -> 
             sort_by=newest_date_field,
             with_networks=spec.get("with_networks", ""),
             without_genres=spec.get("without_genres", ""),
+            min_rating=spec.get("min_rating", 0.0),
         )
         for r in newest:
             r["source_bucket"] = cluster["name"]

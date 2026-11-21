@@ -147,6 +147,14 @@ function esc(s) {
 
 // "TMDB 8.8 · 12 votes" — the vote count shows how solid the rating is
 // (brand-new titles are often rated by only a handful of people).
+function ratings(item) {
+  const bits = [];
+  if (item.imdb_rating) bits.push(`IMDb ${Number(item.imdb_rating).toFixed(1)}`);
+  if (item.rt_score != null) bits.push(`&#127813; ${item.rt_score}%`);
+  return bits.length ? bits.join(" · ") + ` <span class="age">(${tmdbRating(item)})</span>`
+                     : tmdbRating(item);
+}
+
 function tmdbRating(item) {
   const v = item.tmdb_votes || 0;
   if (!item.tmdb_rating || !v) return "TMDB · not rated yet";
@@ -206,7 +214,7 @@ function card(item, section) {
       ${deal}
       <div class="foot">
         <span>${hasFit ? `<span class="fit" style="color:${col}">${item.fit_score}</span>` : ""}
-          <span class="rating">&nbsp;${tmdbRating(item)}</span>
+          <span class="rating">&nbsp;${ratings(item)}</span>
           ${trailer ? " &nbsp;" + trailer : ""}</span>
         <span class="btns">${buttons}</span>
       </div>
@@ -295,7 +303,7 @@ function historyCard(item) {
       ${platforms(item)}
       <div class="overview">${esc(truncate(item.overview, 260))}</div>
       <div class="foot">
-        <span class="rating">${tmdbRating(item)}
+        <span class="rating">${ratings(item)}
           &nbsp;<a class="trailer" href="${esc(trailerHref)}" target="_blank" rel="noopener">&#9654; Trailer</a></span>
       </div>
       <div class="rate-prompt">

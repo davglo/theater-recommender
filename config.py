@@ -52,7 +52,17 @@ ANCHORS_PER_RUN = 12            # seen/watchlist titles used for recommendation 
 DISCOVER_PAGES = 5              # pages per discover query — deeper reach for novel
                                 # series, since popular TV docs are mostly cached now
 TMDB_SLEEP_SECONDS = 0.25       # politeness delay between TMDB calls
-MOVIE_MAX_FRACTION = 0.25       # Dave watches series >> movies: cap movies at 25% of the pool
+MOVIE_MAX_FRACTION = 0.5        # was 0.25; movies wanted back (2026-11-21)
+# Quality bar (2026-11-21 rethink: "everything good"). A title with at least
+# QUALITY_MIN_VOTES votes must rate >= QUALITY_MIN_RATING to show; titles with
+# fewer votes are too new to judge and pass.
+QUALITY_MIN_RATING = 6.8
+QUALITY_MIN_VOTES = 30
+# Catch-all lane discover thresholds (any genre, junk genres excluded).
+OTHER_MIN_RATING = 7.0
+OTHER_MIN_VOTES_TV = 50
+OTHER_MIN_VOTES_MOVIE = 150
+OTHER_MAX_SEASON = 2             # catch-all lane: new series / early seasons only
 
 # --- Write-back server ------------------------------------------------------
 SERVER_HOST = "127.0.0.1"      # advertised host (display only)
@@ -75,6 +85,12 @@ CLUSTER_SPORTS_DOCS = "Sports & Wrestling Docs"
 CLUSTER_SCAMS = "Scams, Scandal & Corruption"
 CLUSTER_PRESTIGE = "Prestige Drama & Crime Series"  # scripted: crime/gangster, prestige, dark comedy
 
+# Catch-all lane (2026-11-21 rethink): anything new that's well rated, any
+# genre. Deliberately NOT in CLUSTER_NAMES (that list is the scorer/profile
+# contract; this lane is only used while fit scoring is off).
+CLUSTER_OTHER = "More Good Releases"
+LANE_NAMES: List[str] = []   # filled after CLUSTER_NAMES below
+
 CLUSTER_NAMES: List[str] = [
     CLUSTER_TRUE_CRIME,
     CLUSTER_SPORTS_DOCS,
@@ -83,6 +99,7 @@ CLUSTER_NAMES: List[str] = [
 ]
 
 CLUSTER_ACCENTS: Dict[str, str] = {
+    CLUSTER_OTHER: "#b48aff",
     CLUSTER_TRUE_CRIME: "#ff6b6b",
     CLUSTER_SPORTS_DOCS: "#ffb454",
     CLUSTER_SCAMS: "#5fd4c4",
@@ -168,6 +185,18 @@ CLUSTERS: List[Dict] = [
         ],
     },
 ]
+
+
+CLUSTERS.append({
+    "name": CLUSTER_OTHER,
+    "discover": [
+        {"media_type": "tv", "with_genres": "", "keywords": [], "vote_floor": OTHER_MIN_VOTES_TV,
+         "min_rating": OTHER_MIN_RATING, "without_genres": JUNK_TV_GENRES},
+        {"media_type": "movie", "with_genres": "", "keywords": [], "vote_floor": OTHER_MIN_VOTES_MOVIE,
+         "min_rating": OTHER_MIN_RATING, "without_genres": JUNK_MOVIE_GENRES},
+    ],
+})
+LANE_NAMES = CLUSTER_NAMES + [CLUSTER_OTHER]
 
 
 class ConfigError(Exception):

@@ -101,13 +101,13 @@ class TMDBClient:
         sort_by: str = "popularity.desc",
         with_networks: str = "",
         without_genres: str = "",
+        min_rating: float = 0.0,
     ) -> List[Dict]:
         """TV filters on EPISODE air dates (air_date.*), so returning shows with a
         new season in the window are found, not just brand-new series. Movies
         filter on primary release date."""
         prefix = "air_date" if media_type == "tv" else "primary_release_date"
         params: Dict = {
-            "with_genres": with_genres,
             "vote_count.gte": vote_floor,
             "sort_by": sort_by,
             "include_adult": "false",
@@ -116,10 +116,14 @@ class TMDBClient:
             f"{prefix}.lte": date_lte,
             "page": page,
         }
+        if with_genres:
+            params["with_genres"] = with_genres
         if keyword_ids:
             params["with_keywords"] = "|".join(str(k) for k in keyword_ids)  # OR
         if with_networks:
             params["with_networks"] = with_networks  # TV only; pipe-separated = OR
+        if min_rating:
+            params["vote_average.gte"] = min_rating
         if without_genres:
             params["without_genres"] = without_genres  # excludes a title having ANY of these
         data = self._get(f"/discover/{media_type}", params)
@@ -222,7 +226,7 @@ def detail_to_title_row(d: Dict) -> Dict:
         # Only real lanes (anchor/trending buckets start with "_"); db upsert
         # COALESCEs, so callers without a bucket never erase a stored lane.
         "source_lane": (d.get("source_bucket")
-                        if d.get("source_bucket") in config.CLUSTER_NAMES else None),
+                        if d.get("source_bucket") in config.LANE_NAMES else None),
     }
 
 

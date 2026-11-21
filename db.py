@@ -110,7 +110,9 @@ _ADDED_COLUMNS = {
                "original_language": "TEXT", "popularity": "REAL",
                "recent_date": "TEXT", "latest_season": "INTEGER",
                "source_lane": "TEXT", "tmdb_votes": "INTEGER",
-               "platforms": "TEXT"},
+               "platforms": "TEXT", "imdb_id": "TEXT", "imdb_rating": "REAL",
+               "imdb_votes": "INTEGER", "rt_score": "INTEGER",
+               "critics_checked_at": "TEXT"},
     "title_status": {"rating": "INTEGER"},
 }
 

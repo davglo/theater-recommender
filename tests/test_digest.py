@@ -268,5 +268,16 @@ class TestScoringOff(unittest.TestCase):
         self.assertIn((1, "tv"), db.known_keys(self.conn, include_scored=False))
 
 
+class TestQualityBar(unittest.TestCase):
+    def test_bar(self):
+        from digest import passes_quality
+        self.assertTrue(passes_quality(None, 0))        # too new to judge
+        self.assertTrue(passes_quality(4.0, 5))         # few votes: passes
+        self.assertTrue(passes_quality(7.5, 500))
+        self.assertFalse(passes_quality(5.9, 500))      # enough votes, low rating
+        self.assertFalse(passes_quality(10.0, 1, config.CLUSTER_OTHER))   # catch-all must prove itself
+        self.assertTrue(passes_quality(7.6, 142, config.CLUSTER_OTHER))
+
+
 if __name__ == "__main__":
     unittest.main()

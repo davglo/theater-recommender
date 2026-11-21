@@ -16,6 +16,7 @@ from typing import Optional
 import config
 import db
 import digest as digest_mod
+import omdb_client
 import profile as profile_mod
 import render
 import scorer
@@ -138,6 +139,10 @@ def main() -> int:
             above += 1
         logger.info("fit scoring off: %d recent titles added to the board", above)
     conn.commit()
+
+    # 4b. IMDb + Rotten Tomatoes scores (best-effort; needs OMDB_API_KEY).
+    if not args.dry_run:
+        omdb_client.enrich(conn, tmdb)
 
     # 5. Digest + dashboard (dashboard sections are recency-based, not tied
     #    to this run — see digest.py).
