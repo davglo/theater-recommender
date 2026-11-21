@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from tmdb_client import TMDBClient, latest_aired_season  # noqa: E402
+from tmdb_client import TMDBClient, latest_aired_season, pick_platforms  # noqa: E402
 
 TODAY = "2026-10-04"
 
@@ -49,6 +49,22 @@ class TestDiscoverParams(unittest.TestCase):
         self.assertEqual((params["air_date.gte"], params["air_date.lte"]), ("2026-07-04", "2026-10-04"))
         movie = self._capture(media_type="movie")["params"]
         self.assertIn("primary_release_date.gte", movie)
+
+
+class TestPickPlatforms(unittest.TestCase):
+    def test_subscription_first_resellers_and_ad_tiers_collapsed(self):
+        us = {"flatrate": [{"provider_name": "Starz Amazon Channel", "display_priority": 1},
+                           {"provider_name": "Philo", "display_priority": 2},
+                           {"provider_name": "Starz", "display_priority": 3}],
+              "ads": [{"provider_name": "Netflix Standard with Ads", "display_priority": 1}],
+              "buy": [{"provider_name": "Apple TV Store"}]}
+        self.assertEqual(pick_platforms(us, ["STARZ"]), ["Starz", "Netflix"])
+
+    def test_fallbacks(self):
+        self.assertEqual(pick_platforms({}, ["BBC One"]), ["Airs on BBC One"])
+        self.assertEqual(pick_platforms({"rent": [{"provider_name": "Apple TV Store"}]}, []),
+                         ["Rent / Buy"])
+        self.assertEqual(pick_platforms({}, []), [])
 
 
 if __name__ == "__main__":

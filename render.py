@@ -70,6 +70,10 @@ TEMPLATE = """<!DOCTYPE html>
            background: var(--panel2); color: var(--muted); text-transform: uppercase;
            margin-left: 6px; vertical-align: 1px; }
   .cluster { font-size: 11px; font-weight: 600; }
+  .platforms { margin: 3px 0 2px; }
+  .platform { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px;
+              border-radius: 4px; margin: 0 4px 2px 0; background: #1f3a2c; color: #7fe0a8; }
+  .platform.alt { background: var(--panel2); color: var(--muted); font-weight: 500; }
   .fitbar { height: 5px; background: var(--panel2); border-radius: 3px; margin: 6px 0; }
   .fitbar > div { height: 100%; border-radius: 3px; }
   .overview { font-size: 12.5px; color: var(--text); flex: 1; margin: 2px 0 4px; }
@@ -122,6 +126,7 @@ TEMPLATE = """<!DOCTYPE html>
   <div class="sec-hint">Your top older picks that are still waiting.</div>
   <div class="grid"></div></section>
 <div id="toast"></div>
+<p class="empty" style="text-align:center;margin:24px 0 12px">Where-to-watch data (US) from JustWatch via TMDB.</p>
 <script>
 const DATA = __DATA__;
 const ACCENTS = __ACCENTS__;
@@ -146,6 +151,15 @@ function tmdbRating(item) {
   const v = item.tmdb_votes || 0;
   if (!item.tmdb_rating || !v) return "TMDB · not rated yet";
   return `TMDB ${Number(item.tmdb_rating).toFixed(1)} · ${v.toLocaleString()} vote${v === 1 ? "" : "s"}`;
+}
+
+// "Where to watch" pills; network / rent-buy fallbacks render muted.
+function platforms(item) {
+  let list = item.platforms || [];
+  if (!list.length && item.media_type === "movie") list = ["Not streaming yet"];
+  if (!list.length) return "";
+  return `<div class="platforms">${list.map(p =>
+    `<span class="platform${/^(Airs on|Rent|Not streaming)/.test(p) ? " alt" : ""}">${esc(p)}</span>`).join("")}</div>`;
 }
 
 function truncate(s, max) {
@@ -185,6 +199,7 @@ function card(item, section) {
         <span class="meta">${item.year || ""}</span>
         <span class="badge">${item.media_type}</span>${age}</div>
       <div class="cluster" style="color:${col}">${esc(item.cluster)}</div>
+      ${platforms(item)}
       ${hasFit ? `<div class="fitbar"><div style="width:${item.fit_score}%;background:${col}"></div></div>` : ""}
       <div class="overview">${esc(truncate(item.overview, 320))}</div>
       ${item.why ? `<div class="why">${esc(item.why)}</div>` : ""}
@@ -277,6 +292,7 @@ function historyCard(item) {
       <div class="title">${esc(item.title)}
         <span class="meta">${item.year || ""}</span>
         <span class="badge">${item.media_type}</span></div>
+      ${platforms(item)}
       <div class="overview">${esc(truncate(item.overview, 260))}</div>
       <div class="foot">
         <span class="rating">${tmdbRating(item)}

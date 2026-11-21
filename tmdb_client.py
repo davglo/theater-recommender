@@ -6,6 +6,7 @@ access tokens (Bearer header) — TMDB hands out both.
 """
 import json
 import logging
+import re
 import time
 from datetime import date
 from typing import Dict, List, Optional
@@ -140,7 +141,7 @@ class TMDBClient:
     def details(self, media_type: str, tmdb_id: int) -> Dict:
         """Full details incl. genre names, keywords, and a trailer link, normalized."""
         data = self._get(f"/{media_type}/{tmdb_id}",
-                         {"append_to_response": "keywords,videos"})
+                         {"append_to_response": "keywords,videos,watch/providers"})
         out = normalize_result(data, media_type)
         out["genre_names"] = [
             g.get("name", "") for g in data.get("genres", []) if g.get("name")
@@ -152,6 +153,9 @@ class TMDBClient:
         ]
         videos = (data.get("videos", {}) or {}).get("results", []) or []
         out["trailer_url"] = _pick_trailer_url(videos)
+        us = ((data.get("watch/providers") or {}).get("results") or {}).get("US") or {}
+        out["platforms"] = pick_platforms(
+            us, [n.get("name", "") for n in data.get("networks") or [] if n.get("name")])
         out["latest_season"], out["recent_date"] = None, out["release_date"]
         if media_type == "tv":
             season = latest_aired_season(data.get("seasons") or [], date.today().isoformat())
@@ -171,6 +175,37 @@ def latest_aired_season(seasons: List[Dict], today: str) -> Optional[Dict]:
     return max(aired, key=lambda s: s["season_number"], default=None)
 
 
+# Resellers/bundles that just repackage another service ("Starz Amazon
+# Channel", Philo, Spectrum): hiding them leaves the service you'd recognize.
+_RESELLER_MARKERS = ("channel", "philo", "spectrum", "fubo", "directv", "sling",
+                     "youtube tv", "xfinity", "cox", "optimum", "verizon")
+
+
+_SHORT_NAMES = {"Peacock Premium": "Peacock", "Peacock Premium Plus": "Peacock",
+                "Paramount Plus Premium": "Paramount+", "Paramount Plus Essential": "Paramount+",
+                "Paramount Plus": "Paramount+", "Disney Plus": "Disney+", "Tubi TV": "Tubi"}
+
+
+def pick_platforms(us: Dict, networks: List[str], limit: int = 2) -> List[str]:
+    """Where to watch in the US (TMDB/JustWatch data): subscription first,
+    then free/ad-supported. Fallbacks: the TV network it airs on, then
+    'Rent / Buy'. Empty list = nothing known."""
+    names: List[str] = []
+    for kind in ("flatrate", "free", "ads"):
+        for p in sorted(us.get(kind) or [], key=lambda x: x.get("display_priority", 999)):
+            name = re.sub(r"\s+(Standard\s+)?with Ads$", "", p.get("provider_name") or "")
+            name = _SHORT_NAMES.get(name, name)
+            if name and name not in names and not any(m in name.lower() for m in _RESELLER_MARKERS):
+                names.append(name)
+    if names:
+        return names[:limit]
+    if networks:
+        return [f"Airs on {networks[0]}"]
+    if us.get("rent") or us.get("buy"):
+        return ["Rent / Buy"]
+    return []
+
+
 def detail_to_title_row(d: Dict) -> Dict:
     """Map details() output to a db.upsert_title row (one place, so every
     caller stores the same columns)."""
@@ -180,6 +215,7 @@ def detail_to_title_row(d: Dict) -> Dict:
         "keywords": json.dumps(d["keyword_names"]), "poster_path": d["poster_path"],
         "overview": d["overview"], "tmdb_rating": d["tmdb_rating"],
         "tmdb_votes": d["vote_count"],
+        "platforms": json.dumps(d.get("platforms") or []),
         "release_date": d["release_date"], "trailer_url": d["trailer_url"],
         "original_language": d["original_language"], "popularity": d["popularity"],
         "recent_date": d["recent_date"], "latest_season": d["latest_season"],
